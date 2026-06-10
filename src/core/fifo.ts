@@ -6,6 +6,9 @@ export function berechneWertpapiere(transaktionen: Transaktion[]): Record<string
   const sorted = [...transaktionen].sort((a, b) => a.datum.getTime() - b.datum.getTime());
 
   for (const tx of sorted) {
+    if (!tx.isin && !tx.wertpapierName) continue;
+    if (tx.typ !== 'kauf' && tx.typ !== 'verkauf' && tx.typ !== 'dividende' && tx.typ !== 'ausschuettung') continue;
+
     const key = tx.isin || tx.wertpapierName;
     if (!wertpapiere[key]) {
       wertpapiere[key] = {
@@ -19,6 +22,7 @@ export function berechneWertpapiere(transaktionen: Transaktion[]): Record<string
         fifoPosten: [],
         transaktionen: [],
         dividendenGesamt: 0,
+        kursHistorie: [],
       };
     }
 
@@ -36,7 +40,6 @@ export function berechneWertpapiere(transaktionen: Transaktion[]): Record<string
       wp.investiert += tx.betrag + tx.gebuehren;
     } else if (tx.typ === 'verkauf') {
       wp.bestand -= tx.stueck;
-      // FIFO: investiertes Kapital anteilig reduzieren
       let remaining = tx.stueck;
       for (const posten of wp.fifoPosten) {
         if (remaining <= 0) break;
@@ -62,6 +65,7 @@ export function berechneSteuerPositionen(transaktionen: Transaktion[]): SteuerPo
   const sorted = [...transaktionen].sort((a, b) => a.datum.getTime() - b.datum.getTime());
 
   for (const tx of sorted) {
+    if (!tx.isin && !tx.wertpapierName) continue;
     const key = tx.isin || tx.wertpapierName;
 
     if (tx.typ === 'kauf') {
@@ -128,16 +132,31 @@ export function berechneSteuerJahre(transaktionen: Transaktion[]): Record<number
   }
 
   const alleJahre = new Set([...Object.keys(jahreMap).map(Number), ...Object.keys(dividendenMap).map(Number)]);
+  const sortierteJahre = [...alleJahre].sort((a, b) => a - b);
   const result: Record<number, SteuerJahr> = {};
 
-  for (const jahr of alleJahre) {
+  let verlustvortrag = 0;
+
+  for (const jahr of sortierteJahre) {
     const pos = jahreMap[jahr] ?? [];
     const gewinne = pos.filter(p => p.gewinn > 0).reduce((s, p) => s + p.gewinn, 0);
     const verluste = pos.filter(p => p.gewinn < 0).reduce((s, p) => s + p.gewinn, 0);
     const dividenden = dividendenMap[jahr] ?? 0;
     const saldo = gewinne + verluste + dividenden;
     const sparerPauschbetrag = jahr >= 2023 ? 1000 : 801;
-    const steuerpflichtig = Math.max(0, saldo - sparerPauschbetrag);
+
+    // Verlustvortrag: Negative Salden werden ins nächste Jahr übertragen
+    const saldoMitVortrag = saldo + verlustvortrag;
+    const steuerpflichtig = Math.max(0, saldoMitVortrag - sparerPauschbetrag);
+
+    if (saldoMitVortrag < 0) {
+      verlustvortrag = saldoMitVortrag;
+    } else if (saldoMitVortrag <= sparerPauschbetrag) {
+      verlustvortrag = 0;
+    } else {
+      verlustvortrag = 0;
+    }
+
     const abgeltungsteuer = Math.round(steuerpflichtig * 0.25 * 100) / 100;
     const soli = Math.round(abgeltungsteuer * 0.055 * 100) / 100;
 
@@ -153,6 +172,7 @@ export function berechneSteuerJahre(transaktionen: Transaktion[]): Record<number
       steuerGesamt: Math.round((abgeltungsteuer + soli) * 100) / 100,
       positionen: pos,
       dividenden: Math.round(dividenden * 100) / 100,
+      verlustvortrag: Math.round(verlustvortrag * 100) / 100,
     };
   }
 

@@ -1,13 +1,174 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
+/* ── PP Dark Mode — colors from portfolio-performance/portfolio source ── */
 :root {
-  font-family: Inter, system-ui, -apple-system, sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
   -webkit-font-smoothing: antialiased;
+
+  /* Backgrounds (from dark_win32.css) */
+  --pp-bg: #1d1f21;
+  --pp-sidebar-bg: #1d1f21;
+  --pp-content-bg: #302e30;
+  --pp-header-bg: #252527;
+  --pp-border: #404040;
+
+  /* Text (from dark theme foreground) */
+  --pp-text: #eeeeee;
+  --pp-text-secondary: #d7d8d8;
+  --pp-text-muted: #909090;
+  --pp-text-disabled: #606060;
+
+  /* Selection / Hover */
+  --pp-row-selected: #37373d;
+  --pp-row-hover: #2a2d2e;
+
+  /* Accent */
+  --pp-accent: #f5a623;
+  --pp-link: #6fc5ee;
+
+  /* Semantic (from PP chart/indicator colors) */
+  --pp-green: #1aad21;
+  --pp-green-text: #4ec94e;
+  --pp-red: #ff2b30;
+  --pp-red-text: #ff6b6b;
+
+  /* Sidebar section headers */
+  --pp-section-header: #b0b0b0;
+
+  /* Tab bar */
+  --pp-tab-active-bg: #302e30;
+  --pp-tab-inactive-bg: #252527;
+  --pp-tab-indicator: #f5a623;
+
+  /* Toolbar icons */
+  --pp-icon: #909090;
+  --pp-icon-hover: #d7d8d8;
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 min-h-screen;
   margin: 0;
+  background: var(--pp-bg);
+  color: var(--pp-text);
 }
+
+/* ── Scrollbars ── */
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: var(--pp-bg); }
+::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #777; }
+
+/* ── Split pane handle ── */
+.pp-split-handle {
+  height: 4px;
+  background: var(--pp-border);
+  cursor: ns-resize;
+  flex-shrink: 0;
+}
+.pp-split-handle:hover { background: #606060; }
+
+/* ── PP table styles ── */
+.pp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+.pp-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--pp-header-bg);
+  border-bottom: 1px solid var(--pp-border);
+  color: var(--pp-text-muted);
+  font-weight: 500;
+  padding: 3px 6px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+.pp-table th.right { text-align: right; }
+.pp-table td {
+  padding: 2px 6px;
+  border-bottom: 1px solid #2a2a2a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pp-table td.right { text-align: right; }
+.pp-table td.mono { font-variant-numeric: tabular-nums; }
+.pp-table tr.pp-row:hover { background: var(--pp-row-hover); }
+.pp-table tr.pp-row.selected { background: var(--pp-row-selected); }
+.pp-table tr.pp-sum {
+  background: var(--pp-header-bg);
+  font-weight: 600;
+  border-top: 1px solid var(--pp-border);
+}
+.pp-table tr.pp-group {
+  background: var(--pp-header-bg);
+  font-weight: 600;
+}
+
+/* ── Resizable column handle ── */
+.pp-col-resize {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 2;
+}
+.pp-col-resize:hover { background: var(--pp-accent); opacity: 0.5; }
+
+/* ── Toolbar ── */
+.pp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--pp-header-bg);
+  border-bottom: 1px solid var(--pp-border);
+  flex-shrink: 0;
+  min-height: 26px;
+}
+.pp-toolbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pp-text);
+  margin-right: auto;
+}
+.pp-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  color: var(--pp-icon);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+}
+.pp-toolbar-btn:hover { color: var(--pp-icon-hover); background: rgba(255,255,255,0.06); }
+.pp-toolbar-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--pp-border);
+  border-radius: 3px;
+  padding: 2px 6px;
+  background: var(--pp-content-bg);
+}
+.pp-toolbar-search input {
+  width: 100px;
+  font-size: 11px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--pp-text);
+}
+.pp-toolbar-search input::placeholder { color: var(--pp-text-disabled); }
