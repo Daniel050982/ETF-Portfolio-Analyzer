@@ -113,7 +113,7 @@ export default function PerformanceChartView() {
               <XAxis dataKey="datum" tick={{ fontSize: 10, fill: 'var(--pp-text-muted)' }} tickLine={false} interval="preserveStartEnd" />
               <YAxis tickFormatter={(v: number) => euro(v)} tick={{ fontSize: 10, fill: 'var(--pp-text-muted)' }} tickLine={false} width={90} />
               <Tooltip
-                formatter={(value: number, name: string) => [euro(value), name === 'investiert' ? 'Investiert' : name === 'marktwert' ? 'Marktwert' : 'Gewinn']}
+                formatter={(value, name) => [euro(value as number), (name as string) === 'investiert' ? 'Investiert' : (name as string) === 'marktwert' ? 'Marktwert' : 'Gewinn']}
                 contentStyle={{ fontSize: '11px', background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }}
               />
               <Legend formatter={(v: string) => v === 'investiert' ? 'Investiert' : v === 'marktwert' ? 'Marktwert' : 'Gewinn'} />
@@ -130,7 +130,7 @@ export default function PerformanceChartView() {
               <XAxis dataKey="datum" tick={{ fontSize: 10, fill: 'var(--pp-text-muted)' }} tickLine={false} interval="preserveStartEnd" />
               <YAxis tickFormatter={(v: number) => prozent(v)} tick={{ fontSize: 10, fill: 'var(--pp-text-muted)' }} tickLine={false} width={70} />
               <Tooltip
-                formatter={(value: number, name: string) => [prozent(value), name === 'portfolioRendite' ? 'Portfolio' : benchmarkLabel]}
+                formatter={(value, name) => [prozent(value as number), (name as string) === 'portfolioRendite' ? 'Portfolio' : benchmarkLabel]}
                 contentStyle={{ fontSize: '11px', background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }}
               />
               <Legend formatter={(v: string) => v === 'portfolioRendite' ? 'Portfolio' : benchmarkLabel} />

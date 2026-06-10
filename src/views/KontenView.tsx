@@ -4,7 +4,7 @@ import { PPTable, type PPColumn } from '../components/PPTable';
 import { SplitPane } from '../components/SplitPane';
 import { Toolbar, TabBar, ColorMarker, getColor } from '../components/PPElements';
 import { euro, datumKurz } from '../utils/format';
-import type { Konto, Transaktion } from '../types/portfolio';
+import type { Transaktion } from '../types/portfolio';
 
 interface KontoRow {
   name: string;

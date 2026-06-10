@@ -77,7 +77,7 @@ export default function ZahlungenView() {
                 <YAxis tickFormatter={(v: number) => euro(v)} tick={{ fontSize: 10, fill: 'var(--pp-text-muted)' }} width={90} />
                 <Tooltip
                   contentStyle={{ fontSize: 11, background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }}
-                  formatter={(v: number, name: string) => [euro(v), name === 'einnahmen' ? 'Einnahmen' : 'Ausgaben']}
+                  formatter={(v, name) => [euro(v as number), (name as string) === 'einnahmen' ? 'Einnahmen' : 'Ausgaben']}
                 />
                 <Legend formatter={(v: string) => v === 'einnahmen' ? 'Einnahmen' : 'Ausgaben'} />
                 <Bar dataKey="einnahmen" fill="var(--pp-green-text)" />

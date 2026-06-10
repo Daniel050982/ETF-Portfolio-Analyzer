@@ -130,7 +130,7 @@ export default function AlleWertpapiereView({ filterTyp, title }: AlleWertpapier
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--pp-border)" />
                       <XAxis dataKey="datum" tick={{ fontSize: 9, fill: 'var(--pp-text-muted)' }} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 9, fill: 'var(--pp-text-muted)' }} tickLine={false} width={60} domain={['auto', 'auto']} />
-                      <Tooltip contentStyle={{ fontSize: 11, background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }} formatter={(v: number) => [euro(v), 'Kurs']} />
+                      <Tooltip contentStyle={{ fontSize: 11, background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }} formatter={(v) => [euro(v as number), 'Kurs']} />
                       <Line type="monotone" dataKey="kurs" stroke="var(--pp-accent)" strokeWidth={1.5} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>

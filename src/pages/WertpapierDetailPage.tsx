@@ -19,10 +19,6 @@ export default function WertpapierDetailPage() {
     );
   }
 
-  const kaeufe = wp.transaktionen.filter(tx => tx.typ === 'kauf');
-  const verkaeufe = wp.transaktionen.filter(tx => tx.typ === 'verkauf');
-  const dividenden = wp.transaktionen.filter(tx => tx.typ === 'dividende' || tx.typ === 'ausschuettung');
-
   return (
     <main className="max-w-7xl mx-auto px-3 sm:px-4 py-6 space-y-6">
       <div className="flex items-center gap-3">

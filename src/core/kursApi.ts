@@ -114,7 +114,7 @@ export async function fetchAlleKurse(
   const batchSize = 5;
   for (let i = 0; i < requests.length; i += batchSize) {
     const batch = requests.slice(i, i + batchSize);
-    const results = await Promise.allSettled(
+    await Promise.allSettled(
       batch.map(async ({ key, symbol }) => {
         const kurs = await fetchAktuellerKurs(symbol);
         if (kurs) result[key] = { kurs: kurs.kurs, datum: kurs.datum };

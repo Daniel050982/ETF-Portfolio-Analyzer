@@ -139,19 +139,17 @@ function findContainerName(
 ): { kontoName?: string; depotName?: string } {
   let current: Element | null = el;
   while (current) {
-    const tag = current.tagName;
+    const tag: string = current.tagName;
     if (tag === 'account' || tag === 'portfolio') {
-      // Check cache first
-      const isAccount = tag === 'account';
-      const cache = isAccount ? accountNameCache : portfolioNameCache;
+      const isAccount: boolean = tag === 'account';
+      const cache: Map<Element, string> = isAccount ? accountNameCache : portfolioNameCache;
       if (cache.has(current)) {
         return isAccount
           ? { kontoName: cache.get(current)! }
           : { depotName: cache.get(current)! };
       }
 
-      // Try resolving
-      const resolved = resolveEl(current, doc) ?? current;
+      const resolved: Element = resolveEl(current, doc) ?? current;
       const name = getText(resolved, 'name');
       if (name) {
         cache.set(current, name);

@@ -4,7 +4,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { usePortfolio } from '../store/PortfolioContext';
 import { KpiCard } from '../components/ui/KpiCard';
 import { Card } from '../components/ui/Card';
-import { euro, prozent, stueck } from '../utils/format';
+import { euro, stueck } from '../utils/format';
 
 const COLORS = ['#34d399', '#60a5fa', '#f472b6', '#fbbf24', '#a78bfa', '#fb923c', '#2dd4bf', '#e879f9'];
 
@@ -43,7 +43,6 @@ export default function DashboardPage() {
   const totalTransaktionen = state.transaktionen.length;
 
   const steuerJahre = Object.values(state.steuerJahre).sort((a, b) => b.jahr - a.jahr);
-  const aktuelleSteuer = steuerJahre[0];
 
   const pieData = totalBestand
     .map((wp, i) => ({
@@ -83,7 +82,7 @@ export default function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) => euro(value)}
+                    formatter={(value) => euro(value as number)}
                     contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '0.5rem' }}
                     labelStyle={{ color: '#e2e8f0' }}
                     itemStyle={{ color: '#94a3b8' }}

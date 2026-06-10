@@ -91,7 +91,7 @@ export default function KlassifizierungView() {
                 </Pie>
                 <Tooltip
                   contentStyle={{ fontSize: 11, background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }}
-                  formatter={(v: number, name: string) => [euro(v), name]}
+                  formatter={(v, name) => [euro(v as number), name as string]}
                 />
                 <Legend
                   wrapperStyle={{ fontSize: 10, color: 'var(--pp-text-secondary)' }}

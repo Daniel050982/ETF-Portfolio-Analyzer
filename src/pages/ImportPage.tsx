@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, AlertTriangle, CheckCircle2, Trash2 } from 'lucide-react';
+import { Upload, AlertTriangle, CheckCircle2, Trash2 } from 'lucide-react';
 import { usePortfolio } from '../store/PortfolioContext';
 import { parsePortfolioPerformanceCSV } from '../core/csvParser';
 import { Card } from '../components/ui/Card';

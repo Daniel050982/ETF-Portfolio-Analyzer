@@ -51,7 +51,7 @@ export default function RenditeVolatilitaetView() {
               <ZAxis range={[60, 60]} />
               <Tooltip
                 contentStyle={{ fontSize: 11, background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }}
-                formatter={(v: number, name: string) => [prozent(v), name === 'volatilitaet' ? 'Volatilität' : 'Rendite']}
+                formatter={(v, name) => [prozent(v as number), (name as string) === 'volatilitaet' ? 'Volatilität' : 'Rendite']}
                 labelFormatter={(_, payload) => payload?.[0]?.payload?.name ?? ''}
               />
               <Scatter data={data} fill="var(--pp-accent)" />

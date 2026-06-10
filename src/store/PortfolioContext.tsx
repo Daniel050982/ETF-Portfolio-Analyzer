@@ -206,7 +206,7 @@ function serializeState(state: State): SerializedData {
 }
 
 function deserializeState(parsed: Record<string, unknown>): State {
-  const transaktionen: Transaktion[] = (parsed.transaktionen as Transaktion[] ?? []).map((tx: Record<string, unknown>) => ({
+  const transaktionen: Transaktion[] = ((parsed.transaktionen ?? []) as Record<string, unknown>[]).map(tx => ({
     ...tx,
     datum: new Date(tx.datum as string),
   })) as Transaktion[];
@@ -237,7 +237,7 @@ function deserializeState(parsed: Record<string, unknown>): State {
     }
   }
 
-  const sparplaene: Sparplan[] = (parsed.sparplaene as Sparplan[] ?? []).map((sp: Record<string, unknown>) => ({
+  const sparplaene: Sparplan[] = ((parsed.sparplaene ?? []) as Record<string, unknown>[]).map(sp => ({
     ...sp,
     startDatum: new Date(sp.startDatum as string),
   })) as Sparplan[];

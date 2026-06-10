@@ -31,7 +31,7 @@ export default function VerteilungView() {
                 <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius="30%" outerRadius="70%" paddingAngle={1} stroke="var(--pp-bg)" strokeWidth={2}>
                   {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                 </Pie>
-                <Tooltip formatter={(value: number) => euro(value)} contentStyle={{ fontSize: '12px', background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }} />
+                <Tooltip formatter={(value) => euro(value as number)} contentStyle={{ fontSize: '12px', background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>

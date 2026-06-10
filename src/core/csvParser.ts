@@ -46,7 +46,6 @@ export function parsePortfolioPerformanceCSV(csvText: string): Transaktion[] {
     header: true,
     skipEmptyLines: true,
     delimiter: ';',
-    encoding: 'UTF-8',
   });
 
   if (result.errors.length > 0) {
