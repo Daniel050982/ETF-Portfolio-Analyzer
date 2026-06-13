@@ -14,7 +14,7 @@ export function berechneWertpapiere(transaktionen: Transaktion[]): Record<string
       wertpapiere[key] = {
         isin: tx.isin,
         name: tx.wertpapierName,
-        typ: 'ETF',
+        typ: 'Sonstige',
         waehrung: tx.waehrung,
         bestand: 0,
         durchschnittskurs: 0,
@@ -30,23 +30,31 @@ export function berechneWertpapiere(transaktionen: Transaktion[]): Record<string
     wp.transaktionen.push(tx);
 
     if (tx.typ === 'kauf') {
+      if (isNaN(tx.betrag) || isNaN(tx.stueck) || tx.stueck <= 0) continue;
+      const kaufbetrag = tx.betrag + tx.gebuehren + tx.steuern;
       wp.fifoPosten.push({
         kaufDatum: tx.datum,
         stueck: tx.stueck,
         kaufkurs: tx.kurs,
-        kaufbetrag: tx.betrag,
+        kaufbetrag,
       });
       wp.bestand += tx.stueck;
-      wp.investiert += tx.betrag + tx.gebuehren;
+      wp.investiert += kaufbetrag;
     } else if (tx.typ === 'verkauf') {
+      if (isNaN(tx.stueck) || tx.stueck <= 0) continue;
       wp.bestand -= tx.stueck;
       let remaining = tx.stueck;
-      for (const posten of wp.fifoPosten) {
-        if (remaining <= 0) break;
+      while (remaining > 0.0001 && wp.fifoPosten.length > 0) {
+        const posten = wp.fifoPosten[0];
         const take = Math.min(remaining, posten.stueck);
-        const anteil = take / (take + (posten.stueck - take) || 1);
+        const anteil = take / posten.stueck;
         wp.investiert -= posten.kaufbetrag * anteil;
+        posten.stueck -= take;
+        posten.kaufbetrag -= posten.kaufbetrag * anteil;
         remaining -= take;
+        if (posten.stueck <= 0.0001) {
+          wp.fifoPosten.shift();
+        }
       }
     } else if (tx.typ === 'dividende' || tx.typ === 'ausschuettung') {
       wp.dividendenGesamt += tx.betrag;

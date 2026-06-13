@@ -1,11 +1,15 @@
 import { useMemo } from 'react';
 import { usePortfolio } from '../store/PortfolioContext';
 import { Toolbar } from '../components/PPElements';
+import { useResizableColumns } from '../components/useResizableColumns';
 import { euro, prozent } from '../utils/format';
 import { berechnePerformance } from '../core/performance';
 
 export default function PerformanceBerechnungView() {
   const { state } = usePortfolio();
+  const perf1Ref = useResizableColumns<HTMLTableElement>('perf-1');
+  const perf2Ref = useResizableColumns<HTMLTableElement>('perf-2');
+  const perf3Ref = useResizableColumns<HTMLTableElement>('perf-3');
 
   const perf = useMemo(() => berechnePerformance(state.transaktionen, state.wertpapiere), [state.transaktionen, state.wertpapiere]);
 
@@ -44,7 +48,7 @@ export default function PerformanceBerechnungView() {
       <div className="flex-1 overflow-auto p-3">
         <div className="flex gap-6 flex-wrap">
           {/* Performance-Kennzahlen */}
-          <table className="pp-table" style={{ maxWidth: 380, border: '1px solid var(--pp-border)' }}>
+          <table className="pp-table" ref={perf1Ref} style={{ maxWidth: 380, border: '1px solid var(--pp-border)' }}>
             <thead><tr><th colSpan={2}>Performance-Kennzahlen</th></tr></thead>
             <tbody>
               <Row label="TTWROR (zeitgew. Rendite)" value={prozent(perf.ttwror)} color={perf.ttwror >= 0 ? 'var(--pp-green-text)' : 'var(--pp-red-text)'} bold />
@@ -55,7 +59,7 @@ export default function PerformanceBerechnungView() {
           </table>
 
           {/* Kapitalflüsse */}
-          <table className="pp-table" style={{ maxWidth: 380, border: '1px solid var(--pp-border)' }}>
+          <table className="pp-table" ref={perf2Ref} style={{ maxWidth: 380, border: '1px solid var(--pp-border)' }}>
             <thead><tr><th colSpan={2}>Kapitalflüsse</th></tr></thead>
             <tbody>
               <Row label="Käufe" value={euro(stats.kaeufe)} />
@@ -67,7 +71,7 @@ export default function PerformanceBerechnungView() {
           </table>
 
           {/* Ergebnisse */}
-          <table className="pp-table" style={{ maxWidth: 380, border: '1px solid var(--pp-border)' }}>
+          <table className="pp-table" ref={perf3Ref} style={{ maxWidth: 380, border: '1px solid var(--pp-border)' }}>
             <thead><tr><th colSpan={2}>Ergebnisse</th></tr></thead>
             <tbody>
               <Row label="Realisierte Gewinne" value={euro(stats.realisierteGewinne)} color="var(--pp-green-text)" />

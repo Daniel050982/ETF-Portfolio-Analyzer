@@ -24,17 +24,18 @@ import ZahlungenView from './views/ZahlungenView';
 import TradesView from './views/TradesView';
 import KlassifizierungView from './views/KlassifizierungView';
 import WaehrungenView from './views/WaehrungenView';
+import DashboardView from './views/dashboard/DashboardView';
 
 function ViewRouter({ view }: { view: ViewId }) {
   switch (view) {
     case 'alle-wertpapiere':
-      return <AlleWertpapiereView />;
+      return <AlleWertpapiereView key="alle" />;
     case 'krypto':
-      return <AlleWertpapiereView filterTyp="Krypto" title="Krypto" />;
+      return <AlleWertpapiereView key="krypto" filterTyp="Krypto" title="Krypto" />;
     case 'etf':
-      return <AlleWertpapiereView filterTyp="ETF" title="ETF" />;
+      return <AlleWertpapiereView key="etf" filterTyp="ETF" title="ETF" />;
     case 'waehrungen':
-      return <AlleWertpapiereView title="Währungen" />;
+      return <AlleWertpapiereView key="waehrungen" title="Währungen" defaultFilters={['onlyExchangeRates']} />;
     case 'konten':
       return <KontenView />;
     case 'depots':
@@ -51,6 +52,8 @@ function ViewRouter({ view }: { view: ViewId }) {
       return <VerteilungView />;
     case 'bestand':
       return <BestandView />;
+    case 'performance-dashboard':
+      return <DashboardView />;
     case 'berechnung':
       return <PerformanceBerechnungView />;
     case 'diagramm-perf':

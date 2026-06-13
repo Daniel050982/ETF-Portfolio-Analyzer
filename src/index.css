@@ -70,7 +70,8 @@ body {
 /* ── PP table styles ── */
 .pp-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12px;
   table-layout: fixed;
 }
@@ -85,9 +86,16 @@ body {
   padding: 3px 6px;
   text-align: left;
   white-space: nowrap;
+  user-select: none;
+  /* kein overflow:hidden, damit der überstehende Resize-Griff sichtbar bleibt;
+     das Ellipsis übernimmt das innere Label-Span. */
+}
+.pp-table th > span {
+  display: inline-block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  user-select: none;
+  vertical-align: bottom;
 }
 .pp-table th.right { text-align: right; }
 .pp-table td {
@@ -112,16 +120,30 @@ body {
 }
 
 /* ── Resizable column handle ── */
+/* Resize-Griff: schmaler Bereich GANZ am rechten Spaltenrand. Bewusst nur 6px,
+   damit der restliche (große) Teil des Headers frei zum Verschieben bleibt. */
 .pp-col-resize {
   position: absolute;
   right: 0;
   top: 0;
   bottom: 0;
-  width: 5px;
+  width: 6px;
   cursor: col-resize;
-  z-index: 2;
+  z-index: 3;
 }
-.pp-col-resize:hover { background: var(--pp-accent); opacity: 0.5; }
+/* Der Header selbst zeigt den Verschiebe-Cursor (außerhalb des Resize-Griffs). */
+.pp-table th > span.pp-th-label { cursor: grab; }
+/* Beim Überfahren erscheint eine dünne Linie genau auf der Spaltengrenze. */
+.pp-col-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 2px;
+  background: transparent;
+}
+.pp-col-resize:hover::after { background: var(--pp-accent); }
 
 /* ── Toolbar ── */
 .pp-toolbar {
@@ -138,7 +160,7 @@ body {
   font-size: 13px;
   font-weight: 600;
   color: var(--pp-text);
-  margin-right: auto;
+  white-space: nowrap;
 }
 .pp-toolbar-btn {
   display: flex;

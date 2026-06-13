@@ -1,6 +1,6 @@
-import type { Transaktion, Wertpapier, Konto, Depot, Sparplan, Taxonomie, Klassifizierung, KursEintrag } from '../types/portfolio';
+import type { Transaktion, Wertpapier, Konto, Depot, Sparplan, Taxonomie, Klassifizierung, Gruppierung, KursEintrag } from '../types/portfolio';
 
-const SHARES_FACTOR = 1_000_000_000;
+const SHARES_FACTOR = 100_000_000;
 const PRICE_FACTOR = 100_000_000;
 const AMOUNT_FACTOR = 100;
 
@@ -23,16 +23,33 @@ function getNumber(el: Element, tag: string): number {
   return t ? Number(t) : 0;
 }
 
-// PP/XStream Reference Resolution: resolves relative XPath-style references.
-// XStream references are relative to the element itself (not its parent).
-// ".." means "go to parent of current position".
+// Index cache: for a parent element, caches children grouped by tagName.
+// Key = parent Element, Value = Map<tagName, Element[]>
+const childIndexCache = new WeakMap<Element, Map<string, Element[]>>();
+
+function getChildrenByTag(parent: Element, tagName: string): Element[] {
+  let tagMap = childIndexCache.get(parent);
+  if (!tagMap) {
+    tagMap = new Map();
+    childIndexCache.set(parent, tagMap);
+  }
+  let arr = tagMap.get(tagName);
+  if (!arr) {
+    arr = [];
+    for (let i = 0; i < parent.children.length; i++) {
+      if (parent.children[i].tagName === tagName) arr.push(parent.children[i]);
+    }
+    tagMap.set(tagName, arr);
+  }
+  return arr;
+}
+
 function resolveReference(el: Element, _doc: Document, depth = 0): Element | null {
   if (depth > 30) return null;
 
   const ref = el.getAttribute('reference');
   if (!ref) return el;
 
-  // Start navigation at the element itself
   let current: Element | null = el;
   const parts = ref.split('/');
 
@@ -50,7 +67,7 @@ function resolveReference(el: Element, _doc: Document, depth = 0): Element | nul
     const tagName = match[1];
     const idx = match[2] ? parseInt(match[2]) - 1 : 0;
 
-    const children = Array.from(current.children).filter(c => c.tagName === tagName);
+    const children = getChildrenByTag(current, tagName);
     current = children[idx] ?? null;
 
     if (current?.getAttribute('reference')) {
@@ -126,49 +143,6 @@ function mapPortfolioTxType(ppType: string): Transaktion['typ'] {
   }
 }
 
-// Find the containing account or portfolio name for a transaction element.
-// Walks up the DOM to the nearest account/portfolio ancestor.
-// For elements inside crossEntry structures, the parent account/portfolio
-// might be a reference or might not have a <name> — resolve and try the
-// top-level container lists as fallback.
-function findContainerName(
-  el: Element,
-  doc: Document,
-  accountNameCache: Map<Element, string>,
-  portfolioNameCache: Map<Element, string>,
-): { kontoName?: string; depotName?: string } {
-  let current: Element | null = el;
-  while (current) {
-    const tag: string = current.tagName;
-    if (tag === 'account' || tag === 'portfolio') {
-      const isAccount: boolean = tag === 'account';
-      const cache: Map<Element, string> = isAccount ? accountNameCache : portfolioNameCache;
-      if (cache.has(current)) {
-        return isAccount
-          ? { kontoName: cache.get(current)! }
-          : { depotName: cache.get(current)! };
-      }
-
-      const resolved: Element = resolveEl(current, doc) ?? current;
-      const name = getText(resolved, 'name');
-      if (name) {
-        cache.set(current, name);
-        return isAccount ? { kontoName: name } : { depotName: name };
-      }
-
-      // Fallback: if the element has a reference, follow it and get the name
-      if (resolved !== current) {
-        const resolvedName = getText(resolved, 'name');
-        if (resolvedName) {
-          cache.set(current, resolvedName);
-          return isAccount ? { kontoName: resolvedName } : { depotName: resolvedName };
-        }
-      }
-    }
-    current = current.parentElement;
-  }
-  return {};
-}
 
 function parseSecurities(doc: Document): Map<string, Partial<Wertpapier>> {
   const secEls = Array.from(doc.querySelectorAll('client > securities > security'));
@@ -179,7 +153,8 @@ function parseSecurities(doc: Document): Map<string, Partial<Wertpapier>> {
 
     const uuid = getText(secEl, 'uuid');
     const isin = getText(secEl, 'isin');
-    const key = isin || uuid || getText(secEl, 'name');
+    const name = getText(secEl, 'name');
+    const key = isin || name;
 
     const kursHistorie: KursEintrag[] = [];
     const priceEls = secEl.querySelectorAll(':scope > prices > price');
@@ -197,29 +172,44 @@ function parseSecurities(doc: Document): Map<string, Partial<Wertpapier>> {
 
     const letzterKurs = kursHistorie.length > 0 ? kursHistorie[kursHistorie.length - 1] : undefined;
 
+    // PP: SecurityProperty mit type=FEED, name=COINGECKOCOINID → CoinGecko Coin-ID
+    let coinGeckoId: string | undefined;
+    const propEls = secEl.querySelectorAll(':scope > property');
+    for (const propEl of propEls) {
+      const propType = propEl.getAttribute('type');
+      const propName = propEl.getAttribute('name');
+      if (propType === 'FEED' && propName === 'COINGECKOCOINID') {
+        coinGeckoId = propEl.textContent?.trim() || undefined;
+      }
+    }
+
     map.set(key, {
       uuid,
       isin,
       wkn: getText(secEl, 'wkn') || undefined,
       symbol: getText(secEl, 'tickerSymbol') || undefined,
-      name: getText(secEl, 'name'),
+      name,
       waehrung: getText(secEl, 'currencyCode') || 'EUR',
       kursHistorie,
       letzterKurs: letzterKurs?.kurs,
       letzterKursDatum: letzterKurs?.datum,
+      notiz: getText(secEl, 'note') || undefined,
       feed: getText(secEl, 'feed') || undefined,
       feedUrl: getText(secEl, 'feedURL') || undefined,
+      coinGeckoId,
       istInaktiv: getText(secEl, 'isRetired') === 'true',
+      isExchangeRate: !!getText(secEl, 'targetCurrencyCode'),
+      targetCurrencyCode: getText(secEl, 'targetCurrencyCode') || undefined,
     });
   }
 
   return map;
 }
 
-// ========== NEW APPROACH: Global Transaction Collector ==========
-// Instead of iterating containers and failing on references,
-// we find ALL non-reference transaction elements in the entire document,
-// parse each one, and determine container assignment from DOM ancestry.
+// ========== Container-based Transaction Collector ==========
+// Iterates resolved top-level accounts and portfolios, reads their direct
+// TX children. No global querySelectorAll('account-transaction') — that
+// returns 29k+ elements on large files and is far too slow.
 
 interface GlobalTxResult {
   transaktionen: Transaktion[];
@@ -229,178 +219,264 @@ interface GlobalTxResult {
   totalElements: number;
   refElements: number;
   parseFailed: number;
+  kontoSaldi: Map<string, number>;
 }
+
+interface TxParseResult {
+  tx: Transaktion;
+  ppType: string;
+  ppAmount: number;
+}
+
+function parseSingleTx(
+  el: Element,
+  doc: Document,
+  isPortfolioTx: boolean,
+  kontoName: string | undefined,
+  depotName: string | undefined,
+  txMap: Map<string, Transaktion>,
+): TxParseResult | null {
+  const ppType = getText(el, 'type');
+  if (!ppType) return null;
+
+  const sec = getSecurityInfo(el, doc);
+  const amount = getNumber(el, 'amount') / AMOUNT_FACTOR;
+  const shares = getNumber(el, 'shares') / SHARES_FACTOR;
+  let fees = getUnitAmount(el, 'FEE');
+  let tax = getUnitAmount(el, 'TAX');
+  const uuid = getText(el, 'uuid') || nextId();
+
+  if (txMap.has(uuid)) {
+    const existing = txMap.get(uuid)!;
+    if (!existing.kontoName && kontoName) existing.kontoName = kontoName;
+    if (!existing.depotName && depotName) existing.depotName = depotName;
+    if (isPortfolioTx && (fees > 0 || tax > 0)) {
+      existing.gebuehren = fees;
+      existing.steuern = tax;
+    }
+    return null;
+  }
+
+  if (isPortfolioTx) {
+    const mapped = mapPortfolioTxType(ppType);
+    let gross = amount;
+    if (ppType === 'BUY' || ppType === 'DELIVERY_INBOUND') gross = amount - fees - tax;
+    else if (ppType === 'SELL' || ppType === 'DELIVERY_OUTBOUND') gross = amount + fees + tax;
+
+    return {
+      ppType, ppAmount: amount,
+      tx: {
+        id: uuid,
+        datum: parseDate(getText(el, 'date')),
+        typ: mapped,
+        isin: sec.isin,
+        wertpapierName: sec.name,
+        stueck: shares,
+        kurs: shares > 0 ? gross / shares : 0,
+        betrag: gross,
+        gebuehren: fees,
+        steuern: tax,
+        waehrung: getText(el, 'currencyCode') || 'EUR',
+        notiz: getText(el, 'note') || undefined,
+        quelle: getText(el, 'source') || undefined,
+        kontoName,
+        depotName,
+      },
+    };
+  }
+
+  const crossEntryEl = el.querySelector(':scope > crossEntry');
+  if ((ppType === 'BUY' || ppType === 'SELL') && fees === 0 && tax === 0 && crossEntryEl) {
+    const ptfTxEl = crossEntryEl.tagName === 'portfolio-transaction'
+      ? crossEntryEl
+      : crossEntryEl.querySelector(':scope > portfolio-transaction') ?? crossEntryEl;
+    const resolvedPtf = resolveEl(ptfTxEl, doc);
+    if (resolvedPtf) {
+      fees = getUnitAmount(resolvedPtf, 'FEE');
+      tax = getUnitAmount(resolvedPtf, 'TAX');
+    }
+  }
+
+  const mapped = mapAccountTxType(ppType);
+  let gross = amount;
+  if (ppType === 'BUY') gross = amount - fees - tax;
+  else if (ppType === 'SELL') gross = amount + fees + tax;
+
+  return {
+    ppType, ppAmount: amount,
+    tx: {
+      id: uuid,
+      datum: parseDate(getText(el, 'date')),
+      typ: mapped,
+      isin: sec.isin,
+      wertpapierName: sec.name,
+      stueck: shares,
+      kurs: shares > 0 ? gross / shares : 0,
+      betrag: gross,
+      gebuehren: fees,
+      steuern: tax,
+      waehrung: getText(el, 'currencyCode') || 'EUR',
+      notiz: getText(el, 'note') || undefined,
+      quelle: getText(el, 'source') || undefined,
+      kontoName,
+      depotName,
+    },
+  };
+}
+
+const PP_CREDIT_TYPES = new Set(['DEPOSIT', 'DIVIDENDS', 'INTEREST', 'SELL', 'TRANSFER_IN', 'TAX_REFUND', 'FEES_REFUND']);
+const PP_DEBIT_TYPES = new Set(['FEES', 'INTEREST_CHARGE', 'TAXES', 'REMOVAL', 'BUY', 'TRANSFER_OUT']);
 
 function collectAllTransactions(doc: Document): GlobalTxResult {
   const txMap = new Map<string, Transaktion>();
   let kontoTxCount = 0;
   let depotTxCount = 0;
   let unassignedCount = 0;
+  let totalElements = 0;
   let refElements = 0;
   let parseFailed = 0;
+  const kontoSaldi = new Map<string, number>();
+  const txRawAmount = new Map<string, { ppType: string; ppAmount: number }>();
 
-  // Caches for container name resolution
-  const accountNameCache = new Map<Element, string>();
-  const portfolioNameCache = new Map<Element, string>();
-
-  // Pre-populate caches from top-level containers
+  // Step 1: Resolve top-level accounts and portfolios (typically only 3-10 each)
+  const accounts: { name: string; el: Element }[] = [];
   for (const accEl of doc.querySelectorAll('client > accounts > account')) {
     const resolved = resolveEl(accEl, doc) ?? accEl;
     const name = getText(resolved, 'name');
-    if (name) {
-      accountNameCache.set(accEl, name);
-      if (resolved !== accEl) accountNameCache.set(resolved, name);
-    }
+    if (name) accounts.push({ name, el: resolved });
   }
+
+  const portfolios: { name: string; el: Element }[] = [];
   for (const ptfEl of doc.querySelectorAll('client > portfolios > portfolio')) {
     const resolved = resolveEl(ptfEl, doc) ?? ptfEl;
     const name = getText(resolved, 'name');
-    if (name) {
-      portfolioNameCache.set(ptfEl, name);
-      if (resolved !== ptfEl) portfolioNameCache.set(resolved, name);
+    if (name) portfolios.push({ name, el: resolved });
+  }
+
+  // Step 2: Process portfolio-transactions FIRST (they have fees/tax as Unit objects)
+  // WICHTIG: Referenzierte portfolio-transactions NICHT überspringen! In PP stehen
+  // Käufe/Verkäufe physisch oft im Referenzkonto (account-transaction/crossEntry/
+  // portfolioTransaction) und sind im Depot-Block nur als <reference> eingehängt.
+  // Würde man sie überspringen, fehlte dem Depot die Zuordnung (depotName) und
+  // damit der komplette Bestand dieser Käufe. Daher: auflösen und mit dem
+  // Portfolio-Namen registrieren (parseSingleTx merged Duplikate per UUID).
+  for (const ptf of portfolios) {
+    const txBlock = ptf.el.querySelector(':scope > transactions');
+    if (!txBlock) continue;
+    for (const txEl of Array.from(txBlock.children)) {
+      if (txEl.tagName !== 'portfolio-transaction') continue;
+      totalElements++;
+
+      const isRef = !!txEl.getAttribute('reference');
+      if (isRef) refElements++;
+      const resolved = isRef ? resolveEl(txEl, doc) : txEl;
+      if (!resolved) { parseFailed++; continue; }
+
+      const result = parseSingleTx(resolved, doc, true, undefined, ptf.name, txMap);
+      if (result) {
+        txMap.set(result.tx.id, result.tx);
+        txRawAmount.set(result.tx.id, { ppType: result.ppType, ppAmount: result.ppAmount });
+        depotTxCount++;
+      } else if (!txMap.has(getText(resolved, 'uuid'))) {
+        parseFailed++;
+      }
     }
   }
 
-  const findCN = (el: Element) => findContainerName(el, doc, accountNameCache, portfolioNameCache);
+  // Step 3: Process account-transactions (inline AND references)
+  // Account-side raw amounts are authoritative for saldo calculation.
+  for (const acc of accounts) {
+    const txBlock = acc.el.querySelector(':scope > transactions');
+    if (!txBlock) continue;
+    for (const txEl of Array.from(txBlock.children)) {
+      if (txEl.tagName !== 'account-transaction') continue;
+      totalElements++;
 
-  // Find ALL account-transaction and portfolio-transaction elements in the entire document
-  const allAccountTx = Array.from(doc.querySelectorAll('account-transaction'));
-  const allPortfolioTx = Array.from(doc.querySelectorAll('portfolio-transaction'));
+      const isRef = !!txEl.getAttribute('reference');
+      if (isRef) {
+        refElements++;
+        const resolved = resolveEl(txEl, doc);
+        if (resolved) {
+          const ppType = getText(resolved, 'type');
+          const ppAmount = getNumber(resolved, 'amount') / AMOUNT_FACTOR;
+          const uuid = getText(resolved, 'uuid');
+          if (uuid && ppType) {
+            txRawAmount.set(uuid, { ppType, ppAmount });
+            const existing = txMap.get(uuid);
+            if (existing) {
+              if (!existing.kontoName) existing.kontoName = acc.name;
+            } else {
+              // TX not yet in map — parse it fully and add
+              const result = parseSingleTx(resolved, doc, false, acc.name, undefined, txMap);
+              if (result) {
+                txMap.set(result.tx.id, result.tx);
+                txRawAmount.set(result.tx.id, { ppType: result.ppType, ppAmount: result.ppAmount });
+                kontoTxCount++;
+              }
+            }
+          }
+        }
+        continue;
+      }
 
-  const totalElements = allAccountTx.length + allPortfolioTx.length;
-
-  // Process account transactions
-  for (const el of allAccountTx) {
-    if (el.getAttribute('reference')) {
-      refElements++;
-      continue;
-    }
-
-    const ppType = getText(el, 'type');
-    if (!ppType) { parseFailed++; continue; }
-
-    const sec = getSecurityInfo(el, doc);
-    const amount = getNumber(el, 'amount') / AMOUNT_FACTOR;
-    const shares = getNumber(el, 'shares') / SHARES_FACTOR;
-    const fees = getUnitAmount(el, 'FEE');
-    const tax = getUnitAmount(el, 'TAX');
-    const uuid = getText(el, 'uuid') || nextId();
-
-    if (txMap.has(uuid)) continue;
-
-    const container = findCN(el);
-
-    // Also extract cross-entry info for depot assignment
-    const crossEntryEl = el.querySelector(':scope > crossEntry');
-    let depotName = container.depotName;
-    let kontoName = container.kontoName;
-    if (crossEntryEl) {
-      // The crossEntry element contains (or references) a portfolio-transaction.
-      // From that we can find the portfolio name.
-      const ptfTxEl = crossEntryEl.tagName === 'portfolio-transaction'
-        ? crossEntryEl
-        : crossEntryEl.querySelector(':scope > portfolio-transaction') ?? crossEntryEl;
-      const resolved = resolveEl(ptfTxEl, doc);
-      if (resolved && !depotName) {
-        const ptfContainer = findCN(resolved);
-        if (ptfContainer.depotName) depotName = ptfContainer.depotName;
+      const result = parseSingleTx(txEl, doc, false, acc.name, undefined, txMap);
+      if (result) {
+        txMap.set(result.tx.id, result.tx);
+        txRawAmount.set(result.tx.id, { ppType: result.ppType, ppAmount: result.ppAmount });
+        kontoTxCount++;
+      } else {
+        // UUID-Duplikat — overwrite with account-side raw amount
+        const uuid = getText(txEl, 'uuid');
+        if (uuid) {
+          const ppType = getText(txEl, 'type');
+          const ppAmount = getNumber(txEl, 'amount') / AMOUNT_FACTOR;
+          if (ppType) txRawAmount.set(uuid, { ppType, ppAmount });
+        }
       }
     }
-
-    const tx: Transaktion = {
-      id: uuid,
-      datum: parseDate(getText(el, 'date')),
-      typ: mapAccountTxType(ppType),
-      isin: sec.isin,
-      wertpapierName: sec.name,
-      stueck: shares,
-      kurs: shares > 0 ? amount / shares : 0,
-      betrag: amount,
-      gebuehren: fees,
-      steuern: tax,
-      waehrung: getText(el, 'currencyCode') || 'EUR',
-      notiz: getText(el, 'note') || undefined,
-      quelle: getText(el, 'source') || undefined,
-      kontoName,
-      depotName,
-    };
-
-    txMap.set(uuid, tx);
-    if (kontoName) kontoTxCount++;
-    else if (depotName) depotTxCount++;
-    else unassignedCount++;
   }
 
-  // Process portfolio transactions
-  for (const el of allPortfolioTx) {
-    if (el.getAttribute('reference')) {
-      refElements++;
-      continue;
-    }
+  // Step 4: For BUY/SELL cross-entries, fill in missing kontoName/depotName
+  // by looking at the cross-entry's other side
+  for (const ptf of portfolios) {
+    const txBlock = ptf.el.querySelector(':scope > transactions');
+    if (!txBlock) continue;
+    for (const txEl of Array.from(txBlock.children)) {
+      if (txEl.tagName !== 'portfolio-transaction') continue;
+      if (txEl.getAttribute('reference')) continue;
+      const uuid = getText(txEl, 'uuid');
+      if (!uuid) continue;
+      const tx = txMap.get(uuid);
+      if (!tx || tx.kontoName) continue;
 
-    const ppType = getText(el, 'type');
-    if (!ppType) { parseFailed++; continue; }
-
-    const sec = getSecurityInfo(el, doc);
-    const amount = getNumber(el, 'amount') / AMOUNT_FACTOR;
-    const shares = getNumber(el, 'shares') / SHARES_FACTOR;
-    const fees = getUnitAmount(el, 'FEE');
-    const tax = getUnitAmount(el, 'TAX');
-    const uuid = getText(el, 'uuid') || nextId();
-
-    if (txMap.has(uuid)) {
-      const existing = txMap.get(uuid)!;
-      const container = findCN(el);
-      if (!existing.depotName && container.depotName) {
-        existing.depotName = container.depotName;
-      }
-      if (!existing.kontoName && container.kontoName) {
-        existing.kontoName = container.kontoName;
-      }
-      continue;
-    }
-
-    const container = findCN(el);
-
-    // Also extract cross-entry info for account assignment
-    const crossEntryEl = el.querySelector(':scope > crossEntry');
-    let kontoName = container.kontoName;
-    let depotName = container.depotName;
-    if (crossEntryEl) {
+      const crossEntryEl = txEl.querySelector(':scope > crossEntry');
+      if (!crossEntryEl) continue;
+      // The crossEntry inside a portfolio-tx points to the account-tx side.
+      // Walk up from that to find which account it belongs to.
+      // But we already know which accounts exist — check if the crossEntry
+      // has an account reference we can match by name.
       const accTxEl = crossEntryEl.tagName === 'account-transaction'
         ? crossEntryEl
-        : crossEntryEl.querySelector(':scope > account-transaction') ??
-          crossEntryEl.querySelector(':scope > accountTransaction') ??
-          crossEntryEl;
-      const resolved = resolveEl(accTxEl, doc);
-      if (resolved && !kontoName) {
-        const accContainer = findCN(resolved);
-        if (accContainer.kontoName) kontoName = accContainer.kontoName;
+        : crossEntryEl.querySelector(':scope > account-transaction');
+      if (!accTxEl) continue;
+      const crossUuid = getText(accTxEl.getAttribute('reference') ? (resolveEl(accTxEl, doc) ?? accTxEl) : accTxEl, 'uuid');
+      if (crossUuid) {
+        const crossTx = txMap.get(crossUuid);
+        if (crossTx?.kontoName) tx.kontoName = crossTx.kontoName;
       }
     }
+  }
 
-    const tx: Transaktion = {
-      id: uuid,
-      datum: parseDate(getText(el, 'date')),
-      typ: mapPortfolioTxType(ppType),
-      isin: sec.isin,
-      wertpapierName: sec.name,
-      stueck: shares,
-      kurs: shares > 0 ? amount / shares : 0,
-      betrag: amount,
-      gebuehren: fees,
-      steuern: tax,
-      waehrung: getText(el, 'currencyCode') || 'EUR',
-      notiz: getText(el, 'note') || undefined,
-      quelle: getText(el, 'source') || undefined,
-      kontoName,
-      depotName,
-    };
-
-    txMap.set(uuid, tx);
-    if (depotName) depotTxCount++;
-    else if (kontoName) kontoTxCount++;
-    else unassignedCount++;
+  // Step 5: Compute account saldi using txRawAmount for ALL UUIDs per account
+  // Build UUID→kontoName from txMap (only account-TX have kontoName)
+  // Then compute saldo from txRawAmount (which has account-side amounts)
+  for (const tx of txMap.values()) {
+    if (!tx.kontoName) continue;
+    const raw = txRawAmount.get(tx.id);
+    if (!raw) continue;
+    const prev = kontoSaldi.get(tx.kontoName) ?? 0;
+    if (PP_CREDIT_TYPES.has(raw.ppType)) kontoSaldi.set(tx.kontoName, prev + raw.ppAmount);
+    else if (PP_DEBIT_TYPES.has(raw.ppType)) kontoSaldi.set(tx.kontoName, prev - raw.ppAmount);
   }
 
   return {
@@ -411,12 +487,13 @@ function collectAllTransactions(doc: Document): GlobalTxResult {
     totalElements,
     refElements,
     parseFailed,
+    kontoSaldi,
   };
 }
 
 // ========== Container Parsing (for Konto/Depot objects, not TX) ==========
 
-function parseAccounts(doc: Document, allTx: Transaktion[]): Konto[] {
+function parseAccounts(doc: Document, allTx: Transaktion[], kontoSaldi: Map<string, number>): Konto[] {
   const accountEls = Array.from(doc.querySelectorAll('client > accounts > account'));
   const konten: Konto[] = [];
   const seen = new Set<string>();
@@ -428,15 +505,7 @@ function parseAccounts(doc: Document, allTx: Transaktion[]): Konto[] {
     seen.add(name);
 
     const kontoTx = allTx.filter(tx => tx.kontoName === name);
-
-    let saldo = 0;
-    for (const tx of kontoTx) {
-      if (['einlage', 'zinsen', 'dividende', 'ausschuettung', 'verkauf', 'steuererstattung', 'umbuchung_ein'].includes(tx.typ)) {
-        saldo += tx.betrag;
-      } else if (['entnahme', 'kauf', 'gebuehren', 'steuern_tx', 'umbuchung_aus'].includes(tx.typ)) {
-        saldo -= tx.betrag;
-      }
-    }
+    const saldo = kontoSaldi.get(name) ?? 0;
 
     konten.push({
       uuid: getText(accEl, 'uuid') || undefined,
@@ -483,6 +552,50 @@ function parsePortfolios(doc: Document, allTx: Transaktion[]): Depot[] {
   }
 
   return depots;
+}
+
+/* ========== Gruppierte Konten (PP ClientFilterMenu) ==========
+   PP speichert die gruppierten Konten als ConfigurationSet mit Key
+   "client-filter-definitions" im <settings>-Block. Jede <config> hat
+   <uuid> (ID), <name> (Label) und <data> = kommagetrennte UUIDs der
+   enthaltenen Konten/Depots. Wir lösen die UUIDs zu Konto-/Depot-Namen auf
+   (das Tool referenziert Konten/Depots über den Namen). */
+function parseGruppierungen(doc: Document, konten: Konto[], depots: Depot[]): Gruppierung[] {
+  // UUID → { typ, name }
+  const uuid2konto = new Map<string, string>();
+  const uuid2depot = new Map<string, string>();
+  for (const k of konten) if (k.uuid) uuid2konto.set(k.uuid, k.name);
+  for (const d of depots) if (d.uuid) uuid2depot.set(d.uuid, d.name);
+
+  // Das richtige <entry> finden: <string>client-filter-definitions</string>
+  let configSet: Element | null = null;
+  for (const entry of Array.from(doc.querySelectorAll('settings > configurationSets > entry'))) {
+    const key = entry.querySelector(':scope > string')?.textContent?.trim();
+    if (key === 'client-filter-definitions') {
+      configSet = entry.querySelector(':scope > config-set');
+      break;
+    }
+  }
+  if (!configSet) return [];
+
+  const gruppierungen: Gruppierung[] = [];
+  for (const cfg of Array.from(configSet.querySelectorAll(':scope > configurations > config'))) {
+    const id = getText(cfg, 'uuid') || nextId();
+    const name = getText(cfg, 'name') || '';
+    const data = getText(cfg, 'data') || '';
+    const uuids = data.split(',').map(s => s.trim()).filter(Boolean);
+
+    const kontoNamen: string[] = [];
+    const depotNamen: string[] = [];
+    for (const u of uuids) {
+      if (uuid2depot.has(u)) depotNamen.push(uuid2depot.get(u)!);
+      else if (uuid2konto.has(u)) kontoNamen.push(uuid2konto.get(u)!);
+    }
+    // nur Gruppierungen mit mindestens einem auflösbaren Element übernehmen
+    if (kontoNamen.length === 0 && depotNamen.length === 0) continue;
+    gruppierungen.push({ id, name, kontoNamen, depotNamen });
+  }
+  return gruppierungen;
 }
 
 // ========== Sparplan-Transaktionen generieren ==========
@@ -589,17 +702,32 @@ function parsePlansAndGenerate(
     const planName = getText(planEl, 'name');
     const intervall = getNumber(planEl, 'interval') || 1;
     const betrag = getNumber(planEl, 'amount') / AMOUNT_FACTOR;
+    const gebuehren = getNumber(planEl, 'fees') / AMOUNT_FACTOR;
+    const steuern = getNumber(planEl, 'taxes') / AMOUNT_FACTOR;
     const startDatum = parseDate(getText(planEl, 'start'));
     const autoGenerate = getText(planEl, 'autoGenerate') !== 'false';
+    // PP InvestmentPlan.Type → Tool-SparplanTyp
+    const ppType = getText(planEl, 'type');
+    const planTyp: import('../types/portfolio').SparplanTyp =
+      ppType === 'DEPOSIT' ? 'einzahlung'
+      : ppType === 'REMOVAL' ? 'entnahme'
+      : ppType === 'INTEREST' ? 'zinsen'
+      : 'kauf';
 
     sparplaene.push({
+      id: getText(planEl, 'uuid') || nextId(),
       name: planName,
+      planTyp,
       wertpapierKey: wpKey,
       depotName,
       kontoName,
       intervall,
       betrag,
+      gebuehren,
+      steuern,
       startDatum,
+      autoGenerate,
+      notiz: getText(planEl, 'note') || undefined,
       aktiv: autoGenerate,
     });
 
@@ -783,7 +911,8 @@ function parseClassification(el: Element, doc: Document): Klassifizierung {
       if (resolved) {
         const isin = getText(resolved, 'isin');
         const name = getText(resolved, 'name');
-        if (isin || name) zuweisungen.push({ wertpapierKey: isin || name, gewicht: weight });
+        const key = isin || name;
+        if (key) zuweisungen.push({ wertpapierKey: key, gewicht: weight });
       }
     }
   }
@@ -795,6 +924,46 @@ function parseClassification(el: Element, doc: Document): Klassifizierung {
     kinder,
     zuweisungen,
   };
+}
+
+// ========== Security Type from Taxonomy ==========
+
+const SECURITY_TYPE_MAP: Record<string, Wertpapier['typ']> = {
+  'Aktie': 'Aktie', 'Stock': 'Aktie', 'Equity': 'Aktie',
+  'Exchange Traded Fund (ETF)': 'ETF', 'Exchange Traded Fund': 'ETF', 'ETF': 'ETF',
+  'Aktienfonds': 'Fonds', 'Fund': 'Fonds', 'Fonds': 'Fonds',
+  'Anleihe': 'Anleihe', 'Bond': 'Anleihe',
+  'Optionsschein': 'Optionsschein', 'Option': 'Optionsschein',
+  'Index': 'Index',
+  'Währung': 'Währung', 'Currency': 'Währung', 'Buchgeld': 'Währung', 'Bargeld': 'Währung',
+  'Kryptowährung': 'Krypto', 'Krypto': 'Krypto', 'Cryptocurrency': 'Krypto', 'Virtuelle Kryptokonten': 'Krypto',
+};
+
+function applySecurityTypes(
+  wertpapierDaten: Map<string, Partial<Wertpapier>>,
+  taxonomien: Taxonomie[],
+) {
+  const secTypeTax = taxonomien.find(t =>
+    t.name === 'Wertpapierart' || t.id === 'security-type' ||
+    t.name === 'Security Type' || t.name.toLowerCase().includes('wertpapierart')
+  );
+  if (!secTypeTax) return;
+
+  function walk(node: Klassifizierung) {
+    const mappedTyp = SECURITY_TYPE_MAP[node.name];
+    if (mappedTyp) {
+      for (const z of node.zuweisungen) {
+        const wp = wertpapierDaten.get(z.wertpapierKey);
+        if (wp) {
+          wp.typ = mappedTyp;
+          wp.typFarbe = node.farbe;
+        }
+      }
+    }
+    for (const child of node.kinder) walk(child);
+  }
+
+  walk(secTypeTax.wurzel);
 }
 
 // ========== Debug Types ==========
@@ -824,6 +993,7 @@ export interface PPImportResult {
   depots: Depot[];
   sparplaene: Sparplan[];
   taxonomien: Taxonomie[];
+  gruppierungen: Gruppierung[];
   basisWaehrung: string;
   debug?: ImportDebugLog;
 }
@@ -846,23 +1016,14 @@ export function parsePortfolioPerformanceXML(xmlText: string): PPImportResult {
 
   const basisWaehrung = getText(clientEl, 'baseCurrency') || 'EUR';
 
-  // XML structure analysis
   const clientChildren = Array.from(clientEl.children).map(c => `<${c.tagName}>(${c.children.length})`);
   const xmlStructure = `client children: ${clientChildren.join(', ')}`;
 
-  // Step 1: Parse securities (needed for Sparplan price lookup)
   const wertpapierDaten = parseSecurities(doc);
-
-  // Step 2: Global collector — find ALL transactions in the entire document
   const globalResult = collectAllTransactions(doc);
+  const { sparplaene, debug: sparplanDebug } = parsePlansAndGenerate(doc, wertpapierDaten, globalResult.transaktionen);
 
-  // Step 3: Generate Sparplan transactions (only fills gaps not already in the XML)
-  const { sparplaene, generatedTx, debug: sparplanDebug } = parsePlansAndGenerate(doc, wertpapierDaten, globalResult.transaktionen);
-
-  // Step 4: Merge all transactions
-  const allTx = [...globalResult.transaktionen, ...generatedTx];
-
-  // UUID dedup (in case of overlap)
+  const allTx = [...globalResult.transaktionen];
   const txMap = new Map<string, Transaktion>();
   for (const tx of allTx) {
     if (!txMap.has(tx.id)) {
@@ -873,13 +1034,13 @@ export function parsePortfolioPerformanceXML(xmlText: string): PPImportResult {
       if (!existing.depotName && tx.depotName) existing.depotName = tx.depotName;
     }
   }
-
   const finalTx = [...txMap.values()].sort((a, b) => a.datum.getTime() - b.datum.getTime());
 
-  // Step 5: Build container objects using the merged transactions
-  const konten = parseAccounts(doc, finalTx);
+  const konten = parseAccounts(doc, finalTx, globalResult.kontoSaldi);
   const depots = parsePortfolios(doc, finalTx);
+  const gruppierungen = parseGruppierungen(doc, konten, depots);
   const taxonomien = parseTaxonomies(doc);
+  applySecurityTypes(wertpapierDaten, taxonomien);
 
   const debug: ImportDebugLog = {
     globalCollector: {
@@ -892,7 +1053,7 @@ export function parsePortfolioPerformanceXML(xmlText: string): PPImportResult {
       unassignedCount: globalResult.unassignedCount,
     },
     sparplaene: sparplanDebug,
-    sparplanTxGenerated: generatedTx.length,
+    sparplanTxGenerated: 0,
     finalTotal: finalTx.length,
     kontenCount: konten.length,
     depotsCount: depots.length,
@@ -906,6 +1067,7 @@ export function parsePortfolioPerformanceXML(xmlText: string): PPImportResult {
     depots,
     sparplaene,
     taxonomien,
+    gruppierungen,
     basisWaehrung,
     debug,
   };

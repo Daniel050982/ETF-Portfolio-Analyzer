@@ -6,9 +6,10 @@ export type ViewId =
   | 'alle-wertpapiere' | 'krypto' | 'etf' | 'waehrungen'
   /* Stammdaten */
   | 'konten' | 'depots' | 'gruppierte-konten' | 'sparplaene' | 'alle-buchungen'
-  /* Berichte */
+  /* Berichte → Vermögensaufstellung (Knoten + Kinder) */
   | 'vermoegensuebersicht' | 'diagramm-berichte' | 'bestand'
-  /* Performance */
+  /* Berichte → Performance (DashboardView + Kinder) */
+  | 'performance-dashboard'
   | 'berechnung' | 'diagramm-perf' | 'rendite-volatilitaet' | 'wertpapiere-perf' | 'zahlungen' | 'trades'
   /* Klassifizierungen */
   | 'klassifizierung-wertpapierart'
@@ -17,12 +18,15 @@ export type ViewId =
   /* Extra: Steuern + Import */
   | 'steuer' | 'steuer-positionen' | 'import';
 
-/* ── Sidebar item definition ── */
+/* ── Sidebar item definition ──
+   Items können verschachtelt sein (PP Navigation.Item.add). Ein Knoten mit
+   `children` ist zugleich anklickbar (öffnet seine eigene View) UND aufklappbar. */
 interface SidebarItem {
   id: ViewId;
   label: string;
   iconColor?: string;
   iconType?: 'folder' | 'list' | 'grouped' | 'sparplan';
+  children?: SidebarItem[];
 }
 
 interface SidebarSection {
@@ -57,24 +61,29 @@ const SECTIONS: SidebarSection[] = [
     ],
   },
   {
+    /* PP Navigation.createPerformanceSection: EINE Section "Berichte" mit den
+       aufklappbaren Knoten "Vermögensaufstellung" und "Performance". */
     id: 'berichte',
     label: 'Berichte',
     items: [
-      { id: 'vermoegensuebersicht', label: 'Vermögensaufstellung' },
-      { id: 'diagramm-berichte', label: 'Diagramm' },
-      { id: 'bestand', label: 'Bestand' },
-    ],
-  },
-  {
-    id: 'performance',
-    label: 'Performance',
-    items: [
-      { id: 'berechnung', label: 'Berechnung' },
-      { id: 'diagramm-perf', label: 'Diagramm' },
-      { id: 'rendite-volatilitaet', label: 'Rendite / Volatilität' },
-      { id: 'wertpapiere-perf', label: 'Wertpapiere' },
-      { id: 'zahlungen', label: 'Zahlungen' },
-      { id: 'trades', label: 'Trades' },
+      {
+        id: 'vermoegensuebersicht', label: 'Vermögensaufstellung',
+        children: [
+          { id: 'diagramm-berichte', label: 'Diagramm' },
+          { id: 'bestand', label: 'Bestand' },
+        ],
+      },
+      {
+        id: 'performance-dashboard', label: 'Performance',
+        children: [
+          { id: 'berechnung', label: 'Berechnung' },
+          { id: 'diagramm-perf', label: 'Diagramm' },
+          { id: 'rendite-volatilitaet', label: 'Rendite / Volatilität' },
+          { id: 'wertpapiere-perf', label: 'Wertpapiere' },
+          { id: 'zahlungen', label: 'Zahlungen' },
+          { id: 'trades', label: 'Trades' },
+        ],
+      },
     ],
   },
   {
@@ -158,6 +167,57 @@ function PlusIcon() {
   );
 }
 
+/* ── Rekursive Item-Ansicht (PP Navigation: Knoten mit Kindern sind klickbar
+   UND aufklappbar). Ein Klick auf einen Knoten mit Kindern navigiert zu seiner
+   eigenen View; der Chevron klappt die Kinder auf/zu. ── */
+function SidebarItemView({ item, depth, activeView, onNavigate, collapsed, toggle }: {
+  item: SidebarItem;
+  depth: number;
+  activeView: ViewId;
+  onNavigate: (view: ViewId) => void;
+  collapsed: Set<string>;
+  toggle: (id: string) => void;
+}) {
+  const active = activeView === item.id;
+  const hasChildren = !!item.children?.length;
+  const nodeKey = `node-${item.id}`;
+  const open = !collapsed.has(nodeKey);
+
+  return (
+    <div>
+      <div
+        onClick={() => onNavigate(item.id)}
+        className="flex items-center gap-[4px] py-[2px] cursor-pointer"
+        style={{
+          paddingLeft: 12 + depth * 14,
+          paddingRight: 6,
+          background: active ? 'var(--pp-row-selected)' : 'transparent',
+          color: active ? 'var(--pp-text)' : 'var(--pp-text-secondary)',
+        }}
+        onMouseEnter={e => { if (!active) (e.currentTarget.style.background = 'var(--pp-row-hover)'); }}
+        onMouseLeave={e => { if (!active) (e.currentTarget.style.background = 'transparent'); }}
+      >
+        {hasChildren
+          ? <span onClick={e => { e.stopPropagation(); toggle(nodeKey); }} className="flex items-center"><Chevron open={open} /></span>
+          : <span className="w-[10px] flex-shrink-0" />}
+        <ItemIcon item={item} />
+        <span className="text-[12px] truncate leading-tight">{item.label}</span>
+      </div>
+      {hasChildren && open && item.children!.map(child => (
+        <SidebarItemView
+          key={child.id}
+          item={child}
+          depth={depth + 1}
+          activeView={activeView}
+          onNavigate={onNavigate}
+          collapsed={collapsed}
+          toggle={toggle}
+        />
+      ))}
+    </div>
+  );
+}
+
 /* ── Sidebar component ── */
 interface SidebarProps {
   activeView: ViewId;
@@ -205,28 +265,18 @@ export function Sidebar({ activeView, onNavigate }: SidebarProps) {
               {section.hasPlus && <PlusIcon />}
             </div>
 
-            {/* Items */}
-            {isOpen && section.items.map(item => {
-              const active = activeView === item.id;
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => onNavigate(item.id)}
-                  className="flex items-center gap-[5px] py-[2px] cursor-pointer"
-                  style={{
-                    paddingLeft: 24,
-                    paddingRight: 6,
-                    background: active ? 'var(--pp-row-selected)' : 'transparent',
-                    color: active ? 'var(--pp-text)' : 'var(--pp-text-secondary)',
-                  }}
-                  onMouseEnter={e => { if (!active) (e.currentTarget.style.background = 'var(--pp-row-hover)'); }}
-                  onMouseLeave={e => { if (!active) (e.currentTarget.style.background = 'transparent'); }}
-                >
-                  <ItemIcon item={item} />
-                  <span className="text-[12px] truncate leading-tight">{item.label}</span>
-                </div>
-              );
-            })}
+            {/* Items (rekursiv, mit aufklappbaren Unterknoten) */}
+            {isOpen && section.items.map(item => (
+              <SidebarItemView
+                key={item.id}
+                item={item}
+                depth={0}
+                activeView={activeView}
+                onNavigate={onNavigate}
+                collapsed={collapsed}
+                toggle={toggle}
+              />
+            ))}
           </div>
         );
       })}

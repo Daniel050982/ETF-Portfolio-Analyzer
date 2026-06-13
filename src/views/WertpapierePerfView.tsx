@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { usePortfolio } from '../store/PortfolioContext';
 import { PPTable, type PPColumn } from '../components/PPTable';
 import { Toolbar, ValueArrow, ColorMarker, getColor } from '../components/PPElements';
-import { euro, prozent, datumKurz } from '../utils/format';
+import { euro, kurs, prozent, datumKurz } from '../utils/format';
 
 interface WpPerf {
   key: string;
@@ -51,7 +51,7 @@ const COLUMNS: PPColumn<WpPerf>[] = [
   { id: 'ttwror', label: 'TTWROR', width: 80, align: 'right', render: r => (
     <span style={{ color: r.ttwror >= 0 ? 'var(--pp-green-text)' : 'var(--pp-red-text)' }}>{prozent(r.ttwror)}</span>
   ), sortFn: (a, b) => a.ttwror - b.ttwror },
-  { id: 'kurs', label: 'Letzter Kurs', width: 90, align: 'right', render: r => r.letzterKurs > 0 ? euro(r.letzterKurs) : '—' },
+  { id: 'kurs', label: 'Letzter Kurs', width: 90, align: 'right', render: r => r.letzterKurs > 0 ? kurs(r.letzterKurs) : '—' },
   { id: 'kursDatum', label: 'Kurs-Datum', width: 90, align: 'right', render: r => r.letzterKursDatum ? datumKurz(r.letzterKursDatum) : '—' },
 ];
 

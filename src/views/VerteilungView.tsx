@@ -2,10 +2,18 @@ import { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { usePortfolio } from '../store/PortfolioContext';
 import { Toolbar, ColorMarker, getColor } from '../components/PPElements';
+import { useColumnConfig, ColumnHeader, type ColumnDef } from '../components/useColumnConfig';
 import { euro, num } from '../utils/format';
+
+const VERTEILUNG_COLUMNS: ColumnDef[] = [
+  { id: 'name', label: 'Wertpapier' },
+  { id: 'value', label: 'Investiert', align: 'right' },
+  { id: 'pct', label: 'Anteil', align: 'right' },
+];
 
 export default function VerteilungView() {
   const { state } = usePortfolio();
+  const cfg = useColumnConfig('verteilung', VERTEILUNG_COLUMNS);
 
   const data = useMemo(() => {
     const wps = Object.values(state.wertpapiere).filter(wp => wp.investiert > 0);
@@ -39,22 +47,23 @@ export default function VerteilungView() {
             <table className="pp-table">
               <thead>
                 <tr>
-                  <th>Wertpapier</th>
-                  <th className="right">Investiert</th>
-                  <th className="right">Anteil</th>
+                  {cfg.orderedColumns.map((c, i) => <ColumnHeader key={c.id} col={c} index={i} cfg={cfg} />)}
                 </tr>
               </thead>
               <tbody>
-                {data.map((d, i) => (
+                {cfg.sortData(data, (d, id) => id === 'name' ? d.name : id === 'value' ? d.value : d.pct).map((d, i) => (
                   <tr key={i} className="pp-row">
-                    <td>
-                      <span className="flex items-center gap-1.5">
-                        <ColorMarker color={d.color} />
-                        {d.name}
-                      </span>
-                    </td>
-                    <td className="right mono">{euro(d.value)}</td>
-                    <td className="right mono">{num(d.pct)} %</td>
+                    {cfg.orderedColumns.map(c => (
+                      <td key={c.id} className={c.align === 'right' ? 'right mono' : undefined}>
+                        {c.id === 'name' ? (
+                          <span className="flex items-center gap-1.5">
+                            <ColorMarker color={d.color} />
+                            {d.name}
+                          </span>
+                        ) : c.id === 'value' ? euro(d.value)
+                          : `${num(d.pct)} %`}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>

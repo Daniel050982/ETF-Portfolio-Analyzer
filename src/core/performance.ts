@@ -102,6 +102,171 @@ export function berechneVolatilitaet(snapshots: PortfolioSnapshot[]): number {
   return dailyVol * Math.sqrt(252) * 100;
 }
 
+// Annualisierte TTWROR (PP: geometrische Annualisierung über die Periodenlänge)
+// (1 + ttwror)^(365/Tage) - 1
+export function berechneTTWRORAnnualized(snapshots: PortfolioSnapshot[]): number {
+  if (snapshots.length < 2) return 0;
+  const ttwror = berechneTTWROR(snapshots) / 100; // als Faktor
+  const tage = (snapshots[snapshots.length - 1].datum.getTime() - snapshots[0].datum.getTime()) / (1000 * 60 * 60 * 24);
+  if (tage <= 0) return 0;
+  return (Math.pow(1 + ttwror, 365 / tage) - 1) * 100;
+}
+
+// Semivolatilität / Downside Deviation (PP: nur negative Tagesrenditen,
+// annualisiert mit √252). PP berechnet Abweichung gegenüber 0.
+export function berechneSemivolatilitaet(snapshots: PortfolioSnapshot[]): number {
+  if (snapshots.length < 3) return 0;
+  const negativeReturns: number[] = [];
+  for (let i = 1; i < snapshots.length; i++) {
+    if (snapshots[i - 1].marktwert > 0) {
+      const r = snapshots[i].marktwert / snapshots[i - 1].marktwert - 1;
+      if (r < 0) negativeReturns.push(r);
+    }
+  }
+  if (negativeReturns.length < 2) return 0;
+  // PP: Summe der quadrierten negativen Returns / Anzahl ALLER Returns
+  const allCount = snapshots.length - 1;
+  const sumSq = negativeReturns.reduce((s, r) => s + r * r, 0);
+  const dailySemiVol = Math.sqrt(sumSq / allCount);
+  return dailySemiVol * Math.sqrt(252) * 100;
+}
+
+export interface DrawdownSerie {
+  datum: Date;
+  drawdown: number; // negativ oder 0, in Prozent
+}
+
+// Drawdown-Zeitreihe (PP Drawdown.getMaxDrawdownSerie): für jeden Tag der
+// prozentuale Rückgang vom bisherigen Höchststand.
+export function berechneDrawdownSerie(snapshots: PortfolioSnapshot[]): DrawdownSerie[] {
+  if (snapshots.length === 0) return [];
+  let peak = snapshots[0].marktwert;
+  return snapshots.map(s => {
+    if (s.marktwert > peak) peak = s.marktwert;
+    const dd = peak > 0 ? (s.marktwert - peak) / peak * 100 : 0;
+    return { datum: s.datum, drawdown: Math.round(dd * 100) / 100 };
+  });
+}
+
+export interface DrawdownDauer {
+  maxDrawdownDauerTage: number;     // längster Zeitraum zwischen zwei Höchstständen
+  maxDrawdownStart: Date | null;
+  maxDrawdownEnde: Date | null;
+  bisPeriodenende: boolean;
+  laengsteRecoveryTage: number;     // längste Zeit zwischen Tief und Hoch
+}
+
+// Max Drawdown Duration (PP Drawdown): längste Zeitspanne zwischen zwei
+// aufeinanderfolgenden Höchstständen (Vermögenshöchststand → nächster
+// Höchststand). Recovery Time = längste Zeit von einem Tief bis zum nächsten Hoch.
+export function berechneDrawdownDauer(snapshots: PortfolioSnapshot[]): DrawdownDauer {
+  const leer: DrawdownDauer = {
+    maxDrawdownDauerTage: 0, maxDrawdownStart: null, maxDrawdownEnde: null,
+    bisPeriodenende: false, laengsteRecoveryTage: 0,
+  };
+  if (snapshots.length < 2) return leer;
+
+  const tage = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+
+  let peak = snapshots[0].marktwert;
+  let peakDatum = snapshots[0].datum;
+  let maxDauer = 0;
+  let maxStart: Date | null = null;
+  let maxEnde: Date | null = null;
+  let bisEnde = false;
+
+  // Recovery: vom letzten Tief (innerhalb eines Drawdowns) bis zum Erreichen eines neuen Hochs
+  let troughDatum = snapshots[0].datum;
+  let troughWert = snapshots[0].marktwert;
+  let maxRecovery = 0;
+
+  for (let i = 1; i < snapshots.length; i++) {
+    const s = snapshots[i];
+    if (s.marktwert >= peak) {
+      // Neuer Höchststand → Dauer seit letztem Höchststand abschließen
+      const dauer = tage(peakDatum, s.datum);
+      if (dauer > maxDauer) {
+        maxDauer = dauer; maxStart = peakDatum; maxEnde = s.datum; bisEnde = false;
+      }
+      // Recovery vom Tief bis hierhin
+      const rec = tage(troughDatum, s.datum);
+      if (rec > maxRecovery) maxRecovery = rec;
+      peak = s.marktwert; peakDatum = s.datum;
+      troughWert = s.marktwert; troughDatum = s.datum;
+    } else if (s.marktwert < troughWert) {
+      troughWert = s.marktwert; troughDatum = s.datum;
+    }
+  }
+
+  // Offener Drawdown bis Periodenende
+  const last = snapshots[snapshots.length - 1];
+  const offen = tage(peakDatum, last.datum);
+  if (offen > maxDauer) {
+    maxDauer = offen; maxStart = peakDatum; maxEnde = last.datum; bisEnde = true;
+  }
+
+  return {
+    maxDrawdownDauerTage: maxDauer, maxDrawdownStart: maxStart,
+    maxDrawdownEnde: maxEnde, bisPeriodenende: bisEnde, laengsteRecoveryTage: maxRecovery,
+  };
+}
+
+export interface SnapshotKategorie {
+  typ: 'anfangswert' | 'einlieferungen' | 'gewinne' | 'erträge' | 'gebuehren' | 'steuern' | 'waehrung' | 'endwert';
+  label: string;
+  betrag: number;
+  vorzeichen: '+' | '-' | '=';
+}
+
+// ClientPerformanceSnapshot-artige Aufschlüsselung (PP PerformanceCalculationWidget):
+// Anfangswert + Einlieferungen/Entnahmen + Kapitalgewinne + Erträge - Gebühren
+// - Steuern = Endwert. Berechnet aus Transaktionen + Snapshots im Intervall.
+export function berechneSnapshotKategorien(
+  transaktionen: Transaktion[],
+  wertpapiere: Record<string, Wertpapier>,
+  von?: Date,
+  bis?: Date,
+): SnapshotKategorie[] {
+  const snapshots = berechneSnapshots(transaktionen, wertpapiere);
+  if (snapshots.length === 0) {
+    return [
+      { typ: 'anfangswert', label: 'Anfangswert', betrag: 0, vorzeichen: '=' },
+      { typ: 'endwert', label: 'Endwert', betrag: 0, vorzeichen: '=' },
+    ];
+  }
+
+  const startTime = von ? von.getTime() : snapshots[0].datum.getTime();
+  const endTime = bis ? bis.getTime() : snapshots[snapshots.length - 1].datum.getTime();
+
+  const imIntervall = snapshots.filter(s => s.datum.getTime() >= startTime && s.datum.getTime() <= endTime);
+  const anfang = imIntervall.length ? imIntervall[0].marktwert : 0;
+  const ende = imIntervall.length ? imIntervall[imIntervall.length - 1].marktwert : 0;
+
+  let einlieferungen = 0, ertraege = 0, gebuehren = 0, steuern = 0;
+  for (const tx of transaktionen) {
+    const t = tx.datum.getTime();
+    if (t < startTime || t > endTime) continue;
+    if (tx.typ === 'kauf') einlieferungen += tx.betrag + tx.gebuehren;
+    else if (tx.typ === 'verkauf') einlieferungen -= tx.betrag;
+    else if (tx.typ === 'dividende' || tx.typ === 'ausschuettung' || tx.typ === 'zinsen') ertraege += tx.betrag;
+    if (tx.gebuehren) gebuehren += tx.gebuehren;
+    if (tx.steuern) steuern += tx.steuern;
+  }
+
+  // Kapitalgewinne = Endwert - Anfangswert - Einlieferungen + Erträge-Abfluss-neutral
+  const gewinne = ende - anfang - einlieferungen;
+
+  return [
+    { typ: 'anfangswert', label: 'Anfangswert', betrag: anfang, vorzeichen: '=' },
+    { typ: 'einlieferungen', label: 'Einlieferungen / Entnahmen', betrag: einlieferungen, vorzeichen: einlieferungen >= 0 ? '+' : '-' },
+    { typ: 'gewinne', label: 'Realisierte + unrealisierte Kursgewinne', betrag: gewinne, vorzeichen: gewinne >= 0 ? '+' : '-' },
+    { typ: 'erträge', label: 'Erträge (Dividenden, Zinsen)', betrag: ertraege, vorzeichen: '+' },
+    { typ: 'gebuehren', label: 'Gebühren', betrag: gebuehren, vorzeichen: '-' },
+    { typ: 'steuern', label: 'Steuern', betrag: steuern, vorzeichen: '-' },
+    { typ: 'endwert', label: 'Endwert', betrag: ende, vorzeichen: '=' },
+  ];
+}
+
 // Portfolio-Snapshots aus Transaktionen + Kurshistorie berechnen
 export function berechneSnapshots(
   transaktionen: Transaktion[],

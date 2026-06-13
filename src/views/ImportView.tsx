@@ -4,7 +4,15 @@ import { usePortfolio } from '../store/PortfolioContext';
 import { parsePortfolioPerformanceCSV } from '../core/csvParser';
 import { parsePortfolioPerformanceXML } from '../core/xmlParser';
 import { Toolbar } from '../components/PPElements';
+import { useColumnConfig, ColumnHeader, type ColumnDef } from '../components/useColumnConfig';
 import { euro, datumKurz } from '../utils/format';
+
+const IMPORT_VORSCHAU_COLUMNS: ColumnDef[] = [
+  { id: 'datum', label: 'Datum', width: 90 },
+  { id: 'typ', label: 'Typ', width: 100 },
+  { id: 'wertpapier', label: 'Wertpapier', width: 200 },
+  { id: 'betrag', label: 'Betrag', align: 'right', width: 100 },
+];
 import type { Transaktion } from '../types/portfolio';
 import type { PPImportResult, ImportDebugLog } from '../core/xmlParser';
 
@@ -69,6 +77,7 @@ function DebugPanel({ debug }: { debug: ImportDebugLog }) {
 
 export default function ImportView() {
   const { state, importTransaktionen, importXML, clearAll } = usePortfolio();
+  const cfg = useColumnConfig('import-vorschau', IMPORT_VORSCHAU_COLUMNS);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -256,19 +265,30 @@ export default function ImportView() {
                 <table className="pp-table">
                   <thead>
                     <tr>
-                      <th style={{ width: 90 }}>Datum</th>
-                      <th style={{ width: 100 }}>Typ</th>
-                      <th style={{ width: 200 }}>Wertpapier</th>
-                      <th className="right" style={{ width: 100 }}>Betrag</th>
+                      {cfg.orderedColumns.map((c, i) => <ColumnHeader key={c.id} col={c} index={i} cfg={cfg} />)}
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.transaktionen.slice(0, 30).map(tx => (
+                    {cfg.sortData(preview.transaktionen.slice(0, 30), (tx, id) =>
+                      id === 'datum' ? tx.datum.getTime()
+                        : id === 'typ' ? tx.typ
+                        : id === 'wertpapier' ? tx.wertpapierName
+                        : tx.betrag
+                    ).map(tx => (
                       <tr key={tx.id} className="pp-row">
-                        <td className="mono">{datumKurz(tx.datum)}</td>
-                        <td>{tx.typ}</td>
-                        <td className="truncate">{tx.wertpapierName}</td>
-                        <td className="right mono">{euro(tx.betrag)}</td>
+                        {cfg.orderedColumns.map(c => (
+                          <td key={c.id} className={
+                            c.id === 'betrag' ? 'right mono'
+                              : c.id === 'datum' ? 'mono'
+                              : c.id === 'wertpapier' ? 'truncate'
+                              : undefined
+                          }>
+                            {c.id === 'datum' ? datumKurz(tx.datum)
+                              : c.id === 'typ' ? tx.typ
+                              : c.id === 'wertpapier' ? tx.wertpapierName
+                              : euro(tx.betrag)}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>

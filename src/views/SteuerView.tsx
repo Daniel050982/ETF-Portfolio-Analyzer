@@ -1,13 +1,48 @@
 import { useState } from 'react';
 import { usePortfolio } from '../store/PortfolioContext';
 import { Toolbar, ValueArrow } from '../components/PPElements';
+import { useColumnConfig, ColumnHeader, type ColumnDef } from '../components/useColumnConfig';
 import { euro } from '../utils/format';
+
+const STEUER_DETAILS_COLUMNS: ColumnDef[] = [
+  { id: 'jahr', label: 'Jahr' },
+  { id: 'gewinne', label: 'Gewinne', align: 'right' },
+  { id: 'verluste', label: 'Verluste', align: 'right' },
+  { id: 'dividenden', label: 'Dividenden', align: 'right' },
+  { id: 'verlustvortrag', label: 'Verlustvortr.', align: 'right' },
+  { id: 'steuer', label: 'Steuer', align: 'right' },
+];
 
 export default function SteuerView() {
   const { state } = usePortfolio();
+  const detailsCfg = useColumnConfig('steuer-details', STEUER_DETAILS_COLUMNS);
   const jahre = Object.values(state.steuerJahre).sort((a, b) => b.jahr - a.jahr);
   const [selectedJahr, setSelectedJahr] = useState<number | null>(jahre[0]?.jahr ?? null);
   const sj = selectedJahr ? state.steuerJahre[selectedJahr] : undefined;
+
+  type SteuerJahr = typeof jahre[number];
+  const detailSortVal = (j: SteuerJahr, id: string): number | string | null => {
+    switch (id) {
+      case 'jahr': return j.jahr;
+      case 'gewinne': return j.realisierteGewinne;
+      case 'verluste': return j.realisierteVerluste;
+      case 'dividenden': return j.dividenden;
+      case 'verlustvortrag': return j.verlustvortrag;
+      case 'steuer': return j.steuerGesamt;
+      default: return null;
+    }
+  };
+  const detailCell = (j: SteuerJahr, id: string): React.ReactNode => {
+    switch (id) {
+      case 'jahr': return <span className="mono" style={{ fontWeight: 500 }}>{j.jahr}</span>;
+      case 'gewinne': return <span style={{ color: 'var(--pp-green-text)' }}>{euro(j.realisierteGewinne)}</span>;
+      case 'verluste': return <span style={{ color: 'var(--pp-red-text)' }}>{euro(j.realisierteVerluste)}</span>;
+      case 'dividenden': return <span style={{ color: 'var(--pp-green-text)' }}>{euro(j.dividenden)}</span>;
+      case 'verlustvortrag': return <span style={{ color: j.verlustvortrag < 0 ? 'var(--pp-red-text)' : 'var(--pp-text-muted)' }}>{j.verlustvortrag !== 0 ? euro(j.verlustvortrag) : '—'}</span>;
+      case 'steuer': return <span style={{ color: j.steuerGesamt > 0 ? 'var(--pp-red-text)' : 'var(--pp-green-text)', fontWeight: 500 }}>{euro(j.steuerGesamt)}</span>;
+      default: return '';
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -67,30 +102,22 @@ export default function SteuerView() {
             <table className="pp-table" style={{ border: '1px solid var(--pp-border)' }}>
               <thead>
                 <tr>
-                  <th>Jahr</th>
-                  <th className="right">Gewinne</th>
-                  <th className="right">Verluste</th>
-                  <th className="right">Dividenden</th>
-                  <th className="right">Verlustvortr.</th>
-                  <th className="right">Steuer</th>
+                  {detailsCfg.orderedColumns.map((c, i) => <ColumnHeader key={c.id} col={c} index={i} cfg={detailsCfg} />)}
                 </tr>
               </thead>
               <tbody>
-                {jahre.map(j => (
+                {detailsCfg.sortData(jahre, detailSortVal).map(j => (
                   <tr
                     key={j.jahr}
                     className={`pp-row${selectedJahr === j.jahr ? ' selected' : ''}`}
                     onClick={() => setSelectedJahr(j.jahr)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <td className="mono" style={{ fontWeight: 500 }}>{j.jahr}</td>
-                    <td className="right mono" style={{ color: 'var(--pp-green-text)' }}>{euro(j.realisierteGewinne)}</td>
-                    <td className="right mono" style={{ color: 'var(--pp-red-text)' }}>{euro(j.realisierteVerluste)}</td>
-                    <td className="right mono" style={{ color: 'var(--pp-green-text)' }}>{euro(j.dividenden)}</td>
-                    <td className="right mono" style={{ color: j.verlustvortrag < 0 ? 'var(--pp-red-text)' : 'var(--pp-text-muted)' }}>{j.verlustvortrag !== 0 ? euro(j.verlustvortrag) : '—'}</td>
-                    <td className="right mono" style={{ color: j.steuerGesamt > 0 ? 'var(--pp-red-text)' : 'var(--pp-green-text)', fontWeight: 500 }}>
-                      {euro(j.steuerGesamt)}
-                    </td>
+                    {detailsCfg.orderedColumns.map(c => (
+                      <td key={c.id} className={c.align === 'right' ? 'right mono' : 'mono'}>
+                        {detailCell(j, c.id)}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
