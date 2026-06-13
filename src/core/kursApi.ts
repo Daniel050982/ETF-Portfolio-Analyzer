@@ -91,7 +91,7 @@ export async function fetchAktuellerKurs(symbol: string): Promise<{ kurs: number
   };
 }
 
-export async function fetchKursHistorie(symbol: string, zeitraum: '1mo' | '3mo' | '6mo' | '1y' | '2y' | '5y' | 'max' = '1y'): Promise<KursEintrag[]> {
+export async function fetchKursHistorie(symbol: string, zeitraum: '5d' | '1mo' | '3mo' | '6mo' | '1y' | '2y' | '5y' | 'max' = '1y'): Promise<KursEintrag[]> {
   const data = await fetchWithFallback(symbol, `range=${zeitraum}&interval=1d`);
   if (!data) return [];
 

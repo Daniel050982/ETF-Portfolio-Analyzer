@@ -351,7 +351,7 @@ export default function SparplaeneView() {
                         const lines = histRows.map(h => `${datumKurz(h.datum)};${h.kurs.toFixed(4).replace('.', ',')}`);
                         const blob = new Blob([header + '\n' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
                         const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-                        a.download = `${selected.wpName}_historische_kurse.csv`; a.click();
+                        a.download = `${selected.name}_historische_kurse.csv`; a.click();
                       }}><Download size={12} /></button>
                     </div>
                     <div className="flex-1 overflow-auto">

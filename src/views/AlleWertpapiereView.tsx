@@ -6,15 +6,9 @@ import { SplitPane } from '../components/SplitPane';
 import { Toolbar, TabBar, ColorMarker, getColor, ValueArrow, WERTPAPIER_FILTER, type FilterOption } from '../components/PPElements';
 import { useColumnConfig, ColumnHeader, type ColumnDef } from '../components/useColumnConfig';
 import { euro, kurs, stueck, datumKurz, prozent } from '../utils/format';
-import type { Wertpapier, Transaktion, Klassifizierung, Taxonomie } from '../types/portfolio';
+import type { Wertpapier, Transaktion, Klassifizierung, Taxonomie, KursEintrag } from '../types/portfolio';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceDot } from 'recharts';
 
-interface ChartMouseEvent {
-  activeTooltipIndex?: string | number;
-  activeLabel?: string | number;
-  activeCoordinate?: { x: number; y: number };
-  isTooltipActive?: boolean;
-}
 import { Download, Plus, Search, Crosshair, Ruler, EyeOff, Eye, RefreshCw } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -34,22 +28,17 @@ const TX_LABELS: Record<string, string> = {
 function getKursChange(wp: Wertpapier): { pct: number; abs: number } | null {
   const hist = wp.kursHistorie ?? [];
   // PP: getPricesIncludingLatest() — latest einfügen falls Datum nicht schon existiert
-  const list = [...hist];
+  const list: KursEintrag[] = [...hist];
   if (wp.letzterKurs != null && wp.letzterKursDatum) {
-    const latestDateStr = typeof wp.letzterKursDatum === 'string'
-      ? (wp.letzterKursDatum as string).slice(0, 10)
-      : wp.letzterKursDatum.toISOString().slice(0, 10);
+    const latestDate = new Date(wp.letzterKursDatum);
+    const latestDateStr = latestDate.toISOString().slice(0, 10);
     const exists = list.some(k => {
-      const kd = typeof k.datum === 'string' ? k.datum.slice(0, 10) : k.datum.toISOString().slice(0, 10);
+      const kd = k.datum.toISOString().slice(0, 10);
       return kd === latestDateStr;
     });
     if (!exists) {
-      list.push({ datum: latestDateStr, kurs: wp.letzterKurs });
-      list.sort((a, b) => {
-        const ad = typeof a.datum === 'string' ? a.datum : a.datum.toISOString();
-        const bd = typeof b.datum === 'string' ? b.datum : b.datum.toISOString();
-        return ad.localeCompare(bd);
-      });
+      list.push({ datum: latestDate, kurs: wp.letzterKurs });
+      list.sort((a, b) => a.datum.getTime() - b.datum.getTime());
     }
   }
   if (list.length < 2) return null;
@@ -57,7 +46,7 @@ function getKursChange(wp: Wertpapier): { pct: number; abs: number } | null {
   const todayStr = new Date().toISOString().slice(0, 10);
   let idx = list.length - 1;
   while (idx >= 0) {
-    const d = typeof list[idx].datum === 'string' ? list[idx].datum.slice(0, 10) : (list[idx].datum as Date).toISOString().slice(0, 10);
+    const d = list[idx].datum.toISOString().slice(0, 10);
     if (d <= todayStr) break;
     idx--;
   }
@@ -126,31 +115,6 @@ function computeBollinger(data: number[], period = 20): { upper: (number | null)
     lower.push(m - 2 * std);
   }
   return { upper, lower, middle };
-}
-
-function computeMACD(data: number[]): { macd: (number | null)[]; signal: (number | null)[]; histogram: (number | null)[] } {
-  const ema12 = computeEMA(data, 12);
-  const ema26 = computeEMA(data, 26);
-  const macdLine: (number | null)[] = [];
-  for (let i = 0; i < data.length; i++) {
-    const a = ema12[i], b = ema26[i];
-    macdLine.push(a != null && b != null ? a - b : null);
-  }
-  const validMacd = macdLine.filter((v): v is number => v != null);
-  const signal = computeEMA(validMacd, 9);
-  const fullSignal: (number | null)[] = [];
-  let si = 0;
-  for (let i = 0; i < macdLine.length; i++) {
-    if (macdLine[i] == null) { fullSignal.push(null); continue; }
-    fullSignal.push(signal[si] ?? null);
-    si++;
-  }
-  const histogram: (number | null)[] = [];
-  for (let i = 0; i < macdLine.length; i++) {
-    const m = macdLine[i], s = fullSignal[i];
-    histogram.push(m != null && s != null ? m - s : null);
-  }
-  return { macd: macdLine, signal: fullSignal, histogram };
 }
 
 const SMA_PERIODS = [5, 20, 30, 38, 50, 90, 100, 200] as const;
@@ -1441,18 +1405,18 @@ export default function AlleWertpapiereView({ filterTyp, title, defaultFilters }
             const text = reader.result as string;
             const lines = text.split(/\r?\n/).filter(l => l.trim());
             if (lines.length < 2) return;
-            const newKurse: { datum: string; kurs: number }[] = [];
+            const newKurse: KursEintrag[] = [];
             for (let i = 1; i < lines.length; i++) {
               const parts = lines[i].split(/[;,\t]/);
               if (parts.length < 2) continue;
               const d = parts[0].trim();
               const k = parseFloat(parts[1].replace(',', '.'));
-              if (d && !isNaN(k)) newKurse.push({ datum: d, kurs: k });
+              if (d && !isNaN(k)) newKurse.push({ datum: new Date(d), kurs: k });
             }
             if (newKurse.length > 0) {
-              const existing = new Set((wp.kursHistorie ?? []).map(k => k.datum));
-              const fresh = newKurse.filter(k => !existing.has(k.datum));
-              const merged = [...(wp.kursHistorie ?? []), ...fresh].sort((a, b) => a.datum.localeCompare(b.datum));
+              const existing = new Set((wp.kursHistorie ?? []).map(k => k.datum.toISOString().slice(0, 10)));
+              const fresh = newKurse.filter(k => !existing.has(k.datum.toISOString().slice(0, 10)));
+              const merged = [...(wp.kursHistorie ?? []), ...fresh].sort((a, b) => a.datum.getTime() - b.datum.getTime());
               updateWertpapier(key, { kursHistorie: merged });
             }
           };
@@ -1470,7 +1434,7 @@ export default function AlleWertpapiereView({ filterTyp, title, defaultFilters }
         if (!kursStr) return;
         const kurs = parseFloat(kursStr.replace(',', '.'));
         if (isNaN(kurs)) return;
-        const merged = [...(wp.kursHistorie ?? []), { datum: dateStr, kurs }].sort((a, b) => a.datum.localeCompare(b.datum));
+        const merged = [...(wp.kursHistorie ?? []), { datum: new Date(dateStr), kurs }].sort((a, b) => a.datum.getTime() - b.datum.getTime());
         updateWertpapier(key, { kursHistorie: merged });
       } },
       { separator: true },
@@ -1478,21 +1442,21 @@ export default function AlleWertpapiereView({ filterTyp, title, defaultFilters }
       { label: 'CSV-Datei exportieren...', onClick: () => {
         if (!wp.kursHistorie?.length) return;
         const header = 'Datum;Schlusskurs';
-        const rows = [...wp.kursHistorie].sort((a, b) => a.datum.localeCompare(b.datum)).map(k => `${datumKurz(k.datum)};${k.kurs.toFixed(4)}`);
+        const rows = [...wp.kursHistorie].sort((a, b) => a.datum.getTime() - b.datum.getTime()).map(k => `${datumKurz(k.datum)};${k.kurs.toFixed(4)}`);
         downloadCSV(`${wp.name}_kurse.csv`, header, rows);
       }, disabled: !wp.kursHistorie?.length },
       { separator: true },
       // PP: Messages.SecurityMenuCreateQuotesFromTransactions → "Historische Kurse aus Buchungen erzeugen"
       { label: 'Historische Kurse aus Buchungen erzeugen', onClick: () => {
         if (!wp.transaktionen.length) return;
-        const buchungsKurse = wp.transaktionen
+        const buchungsKurse: KursEintrag[] = wp.transaktionen
           .filter(tx => tx.kurs > 0 && ['kauf', 'verkauf', 'einlieferung'].includes(tx.typ))
-          .map(tx => ({ datum: typeof tx.datum === 'string' ? tx.datum.slice(0, 10) : tx.datum, kurs: tx.kurs }));
+          .map(tx => ({ datum: new Date(tx.datum), kurs: tx.kurs }));
         if (buchungsKurse.length === 0) return;
-        const existing = new Set((wp.kursHistorie ?? []).map(k => k.datum));
-        const newKurse = buchungsKurse.filter(k => !existing.has(k.datum));
+        const existing = new Set((wp.kursHistorie ?? []).map(k => k.datum.toISOString().slice(0, 10)));
+        const newKurse = buchungsKurse.filter(k => !existing.has(k.datum.toISOString().slice(0, 10)));
         if (newKurse.length > 0) {
-          const merged = [...(wp.kursHistorie ?? []), ...newKurse].sort((a, b) => a.datum.localeCompare(b.datum));
+          const merged = [...(wp.kursHistorie ?? []), ...newKurse].sort((a, b) => a.datum.getTime() - b.datum.getTime());
           updateWertpapier(key, { kursHistorie: merged });
         }
       }, disabled: !wp.waehrung },
@@ -1756,7 +1720,7 @@ export default function AlleWertpapiereView({ filterTyp, title, defaultFilters }
                 onContextMenu={e => { e.preventDefault(); setChartCtxMenu({ x: e.clientX, y: e.clientY }); }}>
                 {kursChartData.length > 0 && chartSize.w > 0 && chartSize.h > 0 ? (
                     <LineChart data={kursChartData} width={chartSize.w} height={chartSize.h} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}
-                      onMouseMove={(s: ChartMouseEvent) => {
+                      onMouseMove={(s: any) => {
                         if (chartTool === 'none') return;
                         const raw = s?.activeTooltipIndex;
                         const idx = raw != null ? Number(raw) : -1;
@@ -1766,7 +1730,7 @@ export default function AlleWertpapiereView({ filterTyp, title, defaultFilters }
                         if (chartTool === 'crosshair') setCrosshairData(pt);
                         else if (chartTool === 'measure' && measureDragging) setMeasureEndData(pt);
                       }}
-                      onClick={(s: ChartMouseEvent) => {
+                      onClick={(s: any) => {
                         if (chartTool === 'none') return;
                         const raw = s?.activeTooltipIndex;
                         const idx = raw != null ? Number(raw) : -1;
@@ -1792,7 +1756,7 @@ export default function AlleWertpapiereView({ filterTyp, title, defaultFilters }
                       <YAxis yAxisId="main" tick={{ fontSize: 9, fill: 'var(--pp-text-muted)' }} tickLine={false} width={60} domain={['auto', 'auto']} />
                       <Tooltip
                         contentStyle={{ fontSize: 11, background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }}
-                        formatter={(v: unknown, name: string) => [euro(v as number), name === 'kurs' ? 'Kurs' : name.toUpperCase()]}
+                        formatter={(v, name) => { const n = String(name ?? ''); return [euro(v as number), n === 'kurs' ? 'Kurs' : n.toUpperCase()]; }}
                         wrapperStyle={chartTool !== 'none' ? { visibility: 'hidden' } : undefined} />
                       {/* PP: Hauptkurslinie */}
                       <Line yAxisId="main" type="monotone" dataKey="kurs" stroke="#4D34EB" strokeWidth={2} dot={false} isAnimationActive={false} />

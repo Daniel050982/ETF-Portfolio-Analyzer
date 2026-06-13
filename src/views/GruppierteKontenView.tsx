@@ -5,7 +5,7 @@ import { SplitPane } from '../components/SplitPane';
 import { useColumnConfig, ColumnHeader, type ColumnDef } from '../components/useColumnConfig';
 import { HierarchyMenu, type MenuNode } from '../components/HierarchyMenu';
 import { VermoegensaufstellungPane, type KontoRow } from '../components/VermoegensaufstellungPane';
-import { computeDepotPositions, REPORT_PERIODS, type ReportPeriod } from '../components/vermoegenLogic';
+import { computeDepotPositions } from '../components/vermoegenLogic';
 import type { ReportingPeriodResult } from '../components/ReportingPeriodDialog';
 import { euro } from '../utils/format';
 import { Plus, Settings, Layers, ChevronRight, ChevronDown } from 'lucide-react';

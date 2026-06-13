@@ -471,8 +471,6 @@ export default function BuchungenView() {
 
   const isFiltered = activeTypes.size < ALL_TYPES.length;
 
-  const clientFilterLabel = activeGruppierung ? activeGruppierung.name : 'Gesamtportfolio';
-
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar im Konten-Stil — PP AllTransactionsView.addButtons:

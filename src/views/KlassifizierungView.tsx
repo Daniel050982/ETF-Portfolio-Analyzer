@@ -4,7 +4,7 @@ import { usePortfolio } from '../store/PortfolioContext';
 import { ColorMarker } from '../components/PPElements';
 import { useResizableColumns } from '../components/useResizableColumns';
 import { euro } from '../utils/format';
-import type { Taxonomie, Klassifizierung, KlassifizierungZuweisung } from '../types/portfolio';
+import type { Taxonomie, Klassifizierung } from '../types/portfolio';
 import {
   List, Circle, PieChart as PieIcon, LayoutGrid, AreaChart, BarChart3,
   Search, Filter, Settings, ChevronDown, ChevronRight, Download,
@@ -807,7 +807,7 @@ export default function KlassifizierungView() {
     });
   }, [selectedTax, state.taxonomien]);
 
-  const onRemoveAssignment = useCallback((classId: string, wpKey: string) => {
+  const onRemoveAssignment = useCallback((_classId: string, wpKey: string) => {
     mutateTaxonomy(tax => {
       function removeFromNode(node: Klassifizierung): boolean {
         const idx = node.zuweisungen.findIndex(z => z.wertpapierKey === wpKey);
@@ -1104,9 +1104,9 @@ export default function KlassifizierungView() {
       {viewMode === 'treemap' && (
         <div className="flex-1 p-4">
           <ResponsiveContainer width="100%" height="100%">
-            <RechartsTreemap data={treemapData} dataKey="size" nameKey="name" stroke="var(--pp-bg)" strokeWidth={2}
+            <RechartsTreemap data={treemapData} dataKey="size" nameKey="name" stroke="var(--pp-bg)" {...{ strokeWidth: 2 } as any}
               content={({ x, y, width, height, name, color }: any) => {
-                if (width < 4 || height < 4) return null;
+                if (width < 4 || height < 4) return <g />;
                 return (
                   <g>
                     <rect x={x} y={y} width={width} height={height} fill={color} stroke="var(--pp-bg)" strokeWidth={2} rx={2} />

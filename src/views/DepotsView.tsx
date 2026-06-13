@@ -8,7 +8,7 @@ import { FarbenMenuFooter } from '../components/FarbenMenu';
 import { useColumnConfig, ColumnHeader, type ColumnDef } from '../components/useColumnConfig';
 import { HierarchyMenu, type MenuNode } from '../components/HierarchyMenu';
 import { ReportingPeriodDialog, type ReportingPeriodResult } from '../components/ReportingPeriodDialog';
-import { euro, kurs as kursFmt, kursLive, stueck, num, datumKurz, prozent } from '../utils/format';
+import { euro, kurs as kursFmt, kursLive, stueck, num, datumKurz } from '../utils/format';
 import { Plus, Filter, Settings, Download } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { AccountTransactionDialog, SecurityTransactionDialog, SecurityTransferDialog, type AccountTxTyp, type SecurityTxTyp } from '../components/TransactionDialogs';
@@ -392,14 +392,6 @@ const SMA_PERIODS = [5, 20, 30, 38, 50, 90, 100, 200];
 /* Reporting-Perioden für ATH/Kursspanne — PP ReportingPeriod (Auswahl der gängigen).
    key: Tage-Fenster ('all' = gesamte Historie) */
 interface ReportPeriod { key: string; label: string; days: number | null }
-const REPORT_PERIODS: ReportPeriod[] = [
-  { key: 'all', label: 'Gesamter Zeitraum', days: null },
-  { key: 'ytd', label: 'Aktuelles Jahr (YTD)', days: null },  // Sonderfall: seit 1.1.
-  { key: '30', label: '30 Tage', days: 30 },
-  { key: '90', label: '90 Tage', days: 90 },
-  { key: '365', label: '1 Jahr', days: 365 },
-  { key: '1095', label: '3 Jahre', days: 1095 },
-];
 
 /* Performance-Kennzahlen mit Berichtszeitraum (PP addPerformanceColumns).
    menuLabel = Submenü-Titel; optionLabel(periodLabel) = Spaltenkopf je Periode;
@@ -882,7 +874,7 @@ function buildVermoegenColumns(periods: ReportPeriod[], taxonomien: { id: string
   ];
 }
 // Standardmäßig sichtbar (PP): Bestand, Name, Symbol, Kurs, Marktwert, Anteil in %, Notiz
-function buildVermoegenHiddenDefault(periods: ReportPeriod[], taxonomien: { id: string }[]): string[] {
+function buildVermoegenHiddenDefault(periods: ReportPeriod[], taxonomien: { id: string; name: string }[]): string[] {
   const all = buildVermoegenColumns(periods, taxonomien).map(c => c.id);
   const visible = new Set(['bestand', 'name', 'symbol', 'kurs', 'marktwert', 'anteil', 'notiz']);
   return all.filter(id => !visible.has(id));

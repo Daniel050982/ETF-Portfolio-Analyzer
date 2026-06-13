@@ -23,7 +23,7 @@ export function TopContributorsWidget(p: WidgetProps) {
   const count = parseInt(p.widget.configuration[CFG.COUNT] ?? '3', 10);
   const beitraege = Object.values(p.calc.ctx.wertpapiere)
     .filter(wp => wp.bestand > 0 && wp.unrealisierterGewinn != null)
-    .map(wp => ({ name: wp.name, key: wp.isin || wp.name, value: wp.unrealisierterGewinn ?? 0 }))
+    .map(wp => ({ name: wp.name, colorKey: wp.isin || wp.name, value: wp.unrealisierterGewinn ?? 0 }))
     .sort((a, b) => b.value - a.value);
   if (beitraege.length === 0) return <ListBody empty>{null}</ListBody>;
   const top = beitraege.slice(0, count);
@@ -31,9 +31,9 @@ export function TopContributorsWidget(p: WidgetProps) {
   return (
     <ListBody>
       <span className="text-[10px] px-1" style={{ color: 'var(--pp-text-muted)' }}>{p.widget.label}</span>
-      {top.map(b => <ContribRow key={b.key} {...b} />)}
+      {top.map(b => <ContribRow key={b.colorKey} {...b} />)}
       {bottom.length > 0 && <div style={{ borderTop: '1px solid var(--pp-border)', margin: '2px 0' }} />}
-      {bottom.map(b => <ContribRow key={b.key} {...b} />)}
+      {bottom.map(b => <ContribRow key={b.colorKey} {...b} />)}
     </ListBody>
   );
 }
@@ -42,7 +42,7 @@ export function TopContributorsReturnWidget(p: WidgetProps) {
   const count = parseInt(p.widget.configuration[CFG.COUNT] ?? '3', 10);
   const perf = Object.values(p.calc.ctx.wertpapiere)
     .filter(wp => wp.bestand > 0 && wp.unrealisierterGewinnProzent != null)
-    .map(wp => ({ name: wp.name, key: wp.isin || wp.name, value: wp.unrealisierterGewinnProzent ?? 0 }))
+    .map(wp => ({ name: wp.name, colorKey: wp.isin || wp.name, value: wp.unrealisierterGewinnProzent ?? 0 }))
     .sort((a, b) => b.value - a.value);
   if (perf.length === 0) return <ListBody empty>{null}</ListBody>;
   const top = perf.slice(0, count);
@@ -50,16 +50,16 @@ export function TopContributorsReturnWidget(p: WidgetProps) {
   return (
     <ListBody>
       <span className="text-[10px] px-1" style={{ color: 'var(--pp-text-muted)' }}>{p.widget.label}</span>
-      {top.map(b => <ContribRow key={b.key} {...b} pct />)}
+      {top.map(b => <ContribRow key={b.colorKey} {...b} pct />)}
       {bottom.length > 0 && <div style={{ borderTop: '1px solid var(--pp-border)', margin: '2px 0' }} />}
-      {bottom.map(b => <ContribRow key={b.key} {...b} pct />)}
+      {bottom.map(b => <ContribRow key={b.colorKey} {...b} pct />)}
     </ListBody>
   );
 }
-function ContribRow({ name, key, value, pct }: { name: string; key: string; value: number; pct?: boolean }) {
+function ContribRow({ name, colorKey, value, pct }: { name: string; colorKey: string; value: number; pct?: boolean }) {
   return (
     <div className="flex items-center gap-1.5 px-1 py-[1px] text-[11px]">
-      <ColorMarker color={getColor(key)} />
+      <ColorMarker color={getColor(colorKey)} />
       <span className="flex-1 truncate" style={{ color: 'var(--pp-text)' }}>{name}</span>
       <span className="mono" style={{ color: value >= 0 ? 'var(--pp-green-text)' : 'var(--pp-red-text)' }}>
         {pct ? pct2(value) : euro(value)}

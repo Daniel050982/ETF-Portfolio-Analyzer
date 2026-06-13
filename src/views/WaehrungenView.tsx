@@ -136,7 +136,7 @@ function ExchangeRatesListTab({ series }: { series: ExchangeRateSeries[] }) {
               <Tooltip
                 contentStyle={{ fontSize: 11, background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }}
                 labelFormatter={l => l as string}
-                formatter={(v: number) => [v.toFixed(4), 'Kurs']}
+                formatter={(v) => [Number(v).toFixed(4), 'Kurs']}
               />
               <Line type="monotone" dataKey="kurs" stroke="#4A90D9" dot={false} strokeWidth={1.5} />
             </LineChart>

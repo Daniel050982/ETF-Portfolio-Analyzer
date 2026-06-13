@@ -6,7 +6,7 @@ import { ReportingPeriodDialog, type ReportingPeriodResult } from './ReportingPe
 import { euro, kurs as kursFmt, kursLive, stueck, num, datumKurz } from '../utils/format';
 import { Download, Settings } from 'lucide-react';
 import {
-  type DepotPosition, type ReportPeriod, REPORT_PERIODS, SMA_PERIODS,
+  type DepotPosition, type ReportPeriod, SMA_PERIODS,
   PERF_METRICS, DIV_METRICS, type PeriodMetric,
   buildVermoegenColumns, buildVermoegenHiddenDefault,
 } from './vermoegenLogic';

@@ -8,7 +8,8 @@ import {
   berechneVolatilitaet, berechneSemivolatilitaet, berechneMaxDrawdown,
   berechneDrawdownSerie, berechneDrawdownDauer, berechneSnapshotKategorien,
 } from '../../core/performance';
-import type { PortfolioSnapshot, DrawdownSerie, DrawdownDauer, SnapshotKategorie } from '../../core/performance';
+import type { DrawdownSerie, DrawdownDauer, SnapshotKategorie } from '../../core/performance';
+import type { PortfolioSnapshot } from '../../types/portfolio';
 
 export interface Interval {
   start: Date; // inklusiv
@@ -99,7 +100,8 @@ export interface PerfResult {
 
 export class DashboardCalc {
   private cache = new Map<string, PerfResult>();
-  constructor(public ctx: DashboardContextData) {}
+  public ctx: DashboardContextData;
+  constructor(ctx: DashboardContextData) { this.ctx = ctx; }
 
   intervalFor(code: string | undefined): Interval {
     return resolveReportingPeriod(code ?? this.ctx.defaultReportingPeriod, this.ctx.today, this.ctx.earliest);

@@ -686,7 +686,7 @@ function PPTableInner<T>({ columns, data, rowKey, selectedKey, onSelect, summary
   // Spalten umordnen per Maus (robust, mit Einfüge-Vorschau). Ersetzt das
   // fehleranfällige native HTML5-Drag. Startet erst nach >5px Bewegung, damit
   // ein einfacher Klick weiterhin sortiert.
-  const startColumnDrag = useCallback((colId: string, e: React.MouseEvent) => {
+  const startColumnDrag = useCallback((_colId: string, e: React.MouseEvent) => {
     if (e.button !== 0) return;
     if ((e.target as HTMLElement)?.classList?.contains('pp-col-resize')) return;
     const startX = e.clientX;

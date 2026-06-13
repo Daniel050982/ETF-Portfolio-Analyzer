@@ -823,12 +823,13 @@ async function loadFromSupabase(): Promise<State | null> {
 
 async function saveToSupabase(state: State): Promise<boolean> {
   if (!supabase) { console.warn('[Supabase] Client ist null — Daten werden NICHT in die Cloud gespeichert'); return false; }
+  const sb = supabase; // lokale, nicht-null Referenz (Narrowing in der Closure erhalten)
   try {
     const full = serializeState(state);
     const { kursHistorien, transaktionen, ...meta } = full;
     const now = new Date().toISOString();
     const upsert = async (key: string, daten: unknown) => {
-      const { error } = await supabase.from(SUPABASE_TABLE)
+      const { error } = await sb.from(SUPABASE_TABLE)
         .upsert({ key, daten, updated_at: now }, { onConflict: 'key' });
       if (error) { console.error(`[Supabase] Chunk "${key}" fehlgeschlagen:`, error.message); return false; }
       return true;
@@ -836,12 +837,12 @@ async function saveToSupabase(state: State): Promise<boolean> {
 
     const slimKonten: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(meta.konten || {})) {
-      const { transaktionen: _t, ...rest } = v as Record<string, unknown>;
+      const { transaktionen: _t, ...rest } = v as unknown as Record<string, unknown>;
       slimKonten[k] = rest;
     }
     const slimDepots: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(meta.depots || {})) {
-      const { transaktionen: _t, ...rest } = v as Record<string, unknown>;
+      const { transaktionen: _t, ...rest } = v as unknown as Record<string, unknown>;
       slimDepots[k] = rest;
     }
     const slimMeta = { ...meta, konten: slimKonten, depots: slimDepots };
@@ -934,6 +935,8 @@ interface ContextType {
   generateSparplanTx: (id: string, txs: Transaktion[]) => void;
   updateWertpapier: (key: string, patch: Partial<Wertpapier>) => void;
   deleteWertpapier: (key: string) => void;
+  setDashboards: (dashboards: Dashboard[]) => void;
+  setBasisWaehrung: (waehrung: string) => void;
   clearAll: () => void;
   resetAll: () => Promise<void>;
 }
