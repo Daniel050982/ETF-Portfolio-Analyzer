@@ -643,10 +643,10 @@ export default function KontenView() {
               </>
             ) : undefined}
           />
-          {/* overflow-hidden statt -auto: die PPTable scrollt selbst (mit
-              stickyem Header); ein zusätzlicher äußerer Scroller würde den
-              Header beim Scrollen mit herausschieben. */}
-          <div className="flex-1 overflow-hidden flex flex-col">
+          {/* overflow-auto wie in Depots: bei der PPTable scrollt deren eigener
+              Scroller (flex-1 min-h-0 füllt den Container, der äußere läuft nicht
+              über); für rohe Tab-Inhalte (Diagramm) bleibt das Scrollen hier. */}
+          <div className="flex-1 overflow-auto flex flex-col">
 
             {detailTab === 'umsaetze' && (
               <>
