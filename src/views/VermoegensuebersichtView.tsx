@@ -99,6 +99,13 @@ export default function VermoegensuebersichtView() {
 
   // ── Taxonomien + Klassifizierungs-Lookup ──
   const taxonomien = useMemo(() => state.taxonomien.map(t => ({ id: t.id, name: t.name })), [state.taxonomien]);
+  // PP: Default-Gruppierung = "Wertpapierart"-Taxonomie (die Wertpapiere UND
+  // Konten zuordnet). Gibt es sie nicht, Fallback auf die eingebaute Typ-
+  // Gruppierung ('__typ__').
+  const defaultKlass = useMemo(() => {
+    const wpArt = state.taxonomien.find(t => t.name === 'Wertpapierart' || t.id === 'security-type');
+    return wpArt ? wpArt.id : '__typ__';
+  }, [state.taxonomien]);
   const klassByTax = useMemo(() => {
     const m = new Map<string, Map<string, string>>();
     for (const t of state.taxonomien) {
@@ -213,7 +220,7 @@ export default function VermoegensuebersichtView() {
             onSelectPosition={setSelectedKey}
             externalToolbar
             onControls={receiveControls}
-            defaultKlassifizierung="__typ__"
+            defaultKlassifizierung={defaultKlass}
           />
         }
         bottom={

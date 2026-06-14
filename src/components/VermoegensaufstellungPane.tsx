@@ -79,11 +79,11 @@ export function VermoegensaufstellungPane({
   const [neuPeriodeDialog, setNeuPeriodeDialog] = useState<string | null>(null);
   const [summeOben, setSummeOben] = useState(() => { try { return localStorage.getItem(`${storageKey}-summe-oben`) === 'true'; } catch { return false; } });
   const [summeUnten, setSummeUnten] = useState(() => { try { return localStorage.getItem(`${storageKey}-summe-unten`) !== 'false'; } catch { return true; } });
-  // Klassifizierungs-Auswahl. Versionierter Key (-klass2), damit bestehende
+  // Klassifizierungs-Auswahl. Versionierter Key (-klass3), damit bestehende
   // Nutzer mit altem implizitem "keine"-Zustand einmalig den neuen Default
   // (PP: Gruppierung nach Wertpapierart) bekommen; spätere bewusste Änderungen
   // bleiben erhalten.
-  const [klassifizierung, setKlassifizierung] = useState(() => { try { return localStorage.getItem(`${storageKey}-klass2`) ?? defaultKlassifizierung; } catch { return defaultKlassifizierung; } });
+  const [klassifizierung, setKlassifizierung] = useState(() => { try { return localStorage.getItem(`${storageKey}-klass3`) ?? defaultKlassifizierung; } catch { return defaultKlassifizierung; } });
 
   // Gesamtvolumen = Marktwerte aller Positionen + Konto-Salden (für Anteil)
   const totalVolumen = useMemo(
@@ -113,19 +113,18 @@ export function VermoegensaufstellungPane({
   const periodIds = (metrics: PeriodMetric[]): string[] =>
     metrics.flatMap(m => reportPeriods.map(per => `${m.id}_${per.key}`));
 
-  const setKlass = (v: string) => { setKlassifizierung(v); try { localStorage.setItem(`${storageKey}-klass2`, v); } catch { /* */ } };
+  const setKlass = (v: string) => { setKlassifizierung(v); try { localStorage.setItem(`${storageKey}-klass3`, v); } catch { /* */ } };
 
-  // "Wertpapierart" wird IMMER als eingebaute Gruppierung nach Anlageklasse
-  // (typ-Feld) angeboten — das ist robust (typ ist stets gesetzt) und
-  // entspricht PPs Default-Gruppierung der Vermögensaufstellung. Eine ggf.
-  // importierte echte "Wertpapierart"-Taxonomie wird aus der Radio-Liste
-  // gefiltert, damit der Eintrag nicht doppelt erscheint.
-  const echteTaxonomien = taxonomien.filter(t => t.name !== 'Wertpapierart' && t.id !== 'security-type');
+  // Gibt es eine echte "Wertpapierart"-Taxonomie (sie ordnet Wertpapiere UND
+  // Konten zu), wird sie als reguläres Radio gezeigt — sie ist auch der Default.
+  // Nur wenn sie fehlt, bieten wir die eingebaute Typ-Gruppierung ('__typ__')
+  // als Ersatz an.
+  const hatWpArtTax = taxonomien.some(t => t.name === 'Wertpapierart' || t.id === 'security-type');
   const menuNodes: MenuNode[] = [
     { kind: 'header', label: 'Klassifizierungen' },
     { kind: 'radio', label: '(keine)', selected: klassifizierung === 'keine', onSelect: () => setKlass('keine') },
-    { kind: 'radio', label: 'Wertpapierart', selected: klassifizierung === '__typ__', onSelect: () => setKlass('__typ__') },
-    ...echteTaxonomien.map((t): MenuNode => ({ kind: 'radio', label: t.name, selected: klassifizierung === t.id, onSelect: () => setKlass(t.id) })),
+    ...(hatWpArtTax ? [] : [{ kind: 'radio' as const, label: 'Wertpapierart', selected: klassifizierung === '__typ__', onSelect: () => setKlass('__typ__') }]),
+    ...taxonomien.map((t): MenuNode => ({ kind: 'radio', label: t.name, selected: klassifizierung === t.id, onSelect: () => setKlass(t.id) })),
     { kind: 'header', label: 'Spalten' },
     check('bestand'), check('name'), check('symbol'), check('isin'), check('wkn'),
     check('kurs'), check('kursdatum'), check('marktwert'), check('anteil'),
@@ -295,24 +294,29 @@ export function VermoegensaufstellungPane({
     }
   };
 
-  // Gruppierung der Positionen nach Klassifizierung
-  const groups = new Map<string, DepotPosition[]>();
-  if (klassifizierung === 'keine') {
-    groups.set('', positions);
+  // Gruppierung nach Klassifizierung. Eine Gruppe hält Wertpapier-Positionen
+  // UND Konto-Zeilen, da PPs "Wertpapierart"-Taxonomie auch Konten zuordnet
+  // (Buchgeld / Virtuelle Kryptokonten / Bargeld).
+  interface Gruppe { positionen: DepotPosition[]; konten: KontoRow[] }
+  const groups = new Map<string, Gruppe>();
+  const ensure = (g: string): Gruppe => {
+    let e = groups.get(g);
+    if (!e) { e = { positionen: [], konten: [] }; groups.set(g, e); }
+    return e;
+  };
+  const grouped = klassifizierung !== 'keine';
+  if (!grouped) {
+    ensure('').positionen.push(...positions);
+    // Konten bleiben separat (siehe Render unten)
   } else if (klassifizierung === '__typ__') {
-    // Eingebaute "Wertpapierart"-Gruppierung nach Anlageklasse (typ-Feld).
-    for (const p of positions) {
-      const g = TYP_LABELS[p.typ] ?? p.typ ?? 'Sonstige';
-      if (!groups.has(g)) groups.set(g, []);
-      groups.get(g)!.push(p);
-    }
+    // Eingebaute Typ-Gruppierung (Fallback ohne echte Taxonomie).
+    for (const p of positions) ensure(TYP_LABELS[p.typ] ?? p.typ ?? 'Sonstige').positionen.push(p);
+    for (const k of kontoRows) ensure('Barbestand').konten.push(k);
   } else {
+    // Echte Taxonomie: Positionen über wpKey, Konten über Konto-Name zuordnen.
     const lookup = klassByTax.get(klassifizierung);
-    for (const p of positions) {
-      const g = lookup?.get(p.wpKey) || 'Nicht klassifiziert';
-      if (!groups.has(g)) groups.set(g, []);
-      groups.get(g)!.push(p);
-    }
+    for (const p of positions) ensure(lookup?.get(p.wpKey) || 'Nicht klassifiziert').positionen.push(p);
+    for (const k of kontoRows) ensure(lookup?.get(k.name) || 'Nicht klassifiziert').konten.push(k);
   }
 
   const sumRow = (label: string) => (
@@ -361,16 +365,16 @@ export function VermoegensaufstellungPane({
           <thead><tr>{cols.map((c, i) => <ColumnHeader key={c.id} col={c} index={i} cfg={cfg} />)}</tr></thead>
           <tbody>
             {summeOben && (positions.length > 0 || kontoRows.length > 0) && sumRow('Summe')}
-            {Array.from(groups.entries()).map(([typ, items0]) => {
-              const items = cfg.sortData(items0, sortVal);
-              const showGroupHeader = klassifizierung !== 'keine';
+            {Array.from(groups.entries()).map(([typ, g]) => {
+              const items = cfg.sortData(g.positionen, sortVal);
+              const anzahl = items.length + g.konten.length;
               return (
                 <Fragment key={typ || '_all'}>
-                  {showGroupHeader && (
+                  {grouped && (
                     <tr className="pp-group">
                       {cols.map(c => (
                         <td key={c.id} className={c.align === 'right' ? 'right mono' : undefined}>
-                          {c.id === 'name' ? `${typ} (${items.length})` : sumCell(items, [], c.id, '')}
+                          {c.id === 'name' ? `${typ} (${anzahl})` : sumCell(items, g.konten, c.id, '')}
                         </td>
                       ))}
                     </tr>
@@ -381,8 +385,19 @@ export function VermoegensaufstellungPane({
                       onClick={onSelectPosition ? () => onSelectPosition(selectedKey === p.wpKey ? null : p.wpKey) : undefined}>
                       {cols.map(c => (
                         <td key={c.id} className={c.align === 'right' ? 'right mono' : undefined}
-                          style={c.id === 'name' && showGroupHeader ? { paddingLeft: 20 } : undefined}>
+                          style={c.id === 'name' && grouped ? { paddingLeft: 20 } : undefined}>
                           {cell(p, c.id)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  {/* Konto-Zeilen dieser Gruppe (PP: Buchgeld/Virtuelle Kryptokonten/Bargeld). */}
+                  {g.konten.map(k => (
+                    <tr key={`konto:${k.name}`} className="pp-row">
+                      {cols.map(c => (
+                        <td key={c.id} className={c.align === 'right' ? 'right mono' : undefined}
+                          style={c.id === 'name' && grouped ? { paddingLeft: 20 } : undefined}>
+                          {kontoCell(k, c.id)}
                         </td>
                       ))}
                     </tr>
@@ -390,29 +405,10 @@ export function VermoegensaufstellungPane({
                 </Fragment>
               );
             })}
-            {/* Konto-/Barbestand-Zeilen. Ohne Gruppierung direkt; mit Gruppierung
-               unter einem eigenen Gruppenkopf "Barbestand" (PP führt Konten als
-               eigene Kategorie, z.B. "Girokonto"). */}
-            {kontoRows.length > 0 && klassifizierung !== 'keine' && (
-              <tr className="pp-group">
-                {cols.map(c => (
-                  <td key={c.id} className={c.align === 'right' ? 'right mono' : undefined}>
-                    {c.id === 'name' ? `Barbestand (${kontoRows.length})`
-                      : c.id === 'marktwert' || c.id === 'marktwertBasis' ? euro(kontoRows.reduce((s, k) => s + k.saldo, 0))
-                      : c.id === 'anteil' ? num(totalVolumen > 0 ? (kontoRows.reduce((s, k) => s + k.saldo, 0) / totalVolumen) * 100 : 0)
-                      : ''}
-                  </td>
-                ))}
-              </tr>
-            )}
-            {kontoRows.map(k => (
+            {/* Ungruppiert: Konten direkt unter den Positionen (keine Gruppe). */}
+            {!grouped && kontoRows.map(k => (
               <tr key={`konto:${k.name}`} className="pp-row">
-                {cols.map(c => (
-                  <td key={c.id} className={c.align === 'right' ? 'right mono' : undefined}
-                    style={c.id === 'name' && klassifizierung !== 'keine' ? { paddingLeft: 20 } : undefined}>
-                    {kontoCell(k, c.id)}
-                  </td>
-                ))}
+                {cols.map(c => <td key={c.id} className={c.align === 'right' ? 'right mono' : undefined}>{kontoCell(k, c.id)}</td>)}
               </tr>
             ))}
             {summeUnten && (positions.length > 0 || kontoRows.length > 0) && sumRow('Summe')}
