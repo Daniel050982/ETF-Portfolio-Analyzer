@@ -374,7 +374,7 @@ export function VermoegensaufstellungPane({
           onAddPeriod(r, neuPeriodeDialog);
         }} />
       )}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto relative">
         <table className="pp-table">
           <thead><tr>{cols.map((c, i) => <ColumnHeader key={c.id} col={c} index={i} cfg={cfg} />)}</tr></thead>
           <tbody>

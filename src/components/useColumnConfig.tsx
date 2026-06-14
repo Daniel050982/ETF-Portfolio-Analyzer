@@ -316,7 +316,7 @@ export function ColumnHeader({ col, index, cfg }: {
     <th
       ref={thRef}
       className={col.align === 'right' ? 'right' : undefined}
-      style={{ width: cfg.widths[col.id] ?? col.width, position: 'relative', cursor: 'pointer' }}
+      style={{ width: cfg.widths[col.id] ?? col.width, position: 'sticky', top: 0, zIndex: 2, cursor: 'pointer' }}
       onMouseDown={startDrag}
       onClick={e => {
         const th = thRef.current;
