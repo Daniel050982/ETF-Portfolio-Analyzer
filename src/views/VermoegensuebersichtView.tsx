@@ -141,7 +141,7 @@ export default function VermoegensuebersichtView() {
       {/* Toolbar — PP StatementOfAssetsView createHeader: 3 Bereiche
           [Titel (mit Konfigname)] [viewToolBar: ConfigStore + ＋] [actionToolBar:
           ClientFilter · Basiswährung · TimeMachine · Export · Spaltenmenü] */}
-      <div className="flex items-center px-2 py-[3px] gap-2 overflow-x-auto" style={{ borderBottom: '1px solid var(--pp-border)', background: 'var(--pp-header-bg)' }}>
+      <div className="flex items-center px-2 py-[3px] gap-2 overflow-hidden" style={{ borderBottom: '1px solid var(--pp-border)', background: 'var(--pp-header-bg)' }}>
         {/* 1. Titel mit aktivem Konfigurationsnamen */}
         <span className="text-[12px] font-semibold whitespace-nowrap flex-shrink-0" style={{ color: 'var(--pp-text)' }}>
           Vermögensaufstellung ({configStore.activeName})
