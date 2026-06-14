@@ -1,33 +1,48 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import {
-  ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { usePortfolio } from '../store/PortfolioContext';
 import { SplitPane } from '../components/SplitPane';
 import { WertpapierDetailPane } from '../components/WertpapierDetailPane';
+import { ConfigStoreDropDowns } from '../components/StatementToolbar';
+import { useConfigStore } from '../components/useConfigStore';
 import { ReportingPeriodDialog, type ReportingPeriodResult } from '../components/ReportingPeriodDialog';
 import { berechneVermoegensReihen, type ReihenId, type ReihenPunkt } from '../core/vermoegensReihen';
 import { REIHEN_META, REIHEN_META_BY_ID } from '../core/vermoegensReihenMeta';
-import { euro, datumKurz } from '../utils/format';
+import { euro } from '../utils/format';
 import { ChevronDown, Download, Settings, Plus, X } from 'lucide-react';
 
 /* ════════════════════════════════════════════════════════════════════════
    Diagramm (Berichte → Vermögensaufstellung → Diagramm)
-   1:1 Nachbau von PP StatementOfAssetsHistoryView (AbstractHistoricView +
-   TimelineChart). Zeigt die Vermögensentwicklung als Zeitreihe; über
-   "Diagramm konfigurieren" lassen sich alle 19 PP-Datenreihen
-   (DataSeriesSet.buildStatementOfAssetsDataSeries) hinzufügen/entfernen.
+   1:1 Nachbau von PP StatementOfAssetsHistoryView
+   (extends AbstractHistoricView → AbstractFinanceView).
 
-   - Toolbar: Berichtszeitraum-DropDown · Export · Diagramm konfigurieren
-   - Chart: ComposedChart (Flächen + Linien + Balken je nach Reihentyp)
-   - Legende unten: Farb-Marker + Name; Klick blendet die Reihe aus/ein,
-     X entfernt sie aus dem Diagramm.
-   - Untere Hälfte: WertpapierDetailPane (wie in der Tabellenansicht).
+   Klassenhierarchie / Toolbar laut PP-Source:
+   - createHeader (AbstractFinanceView): [Titel] [viewToolBar] [actionToolBar]
+   - viewToolBar  = DataSeriesConfigurator → ConfigurationStore-Buttons
+     (gespeicherte Diagramm-Konfigurationen + "Neu"); jede Konfiguration
+     hält ihre eigene Datenreihen-Auswahl.
+   - actionToolBar (AbstractHistoricView.addButtons → super, dann
+     StatementOfAssetsHistoryView.addButtons):
+       1. ReportingPeriodDropDown            (AbstractHistoricView)
+       2. Export-Button (Messages.MenuExportData "Daten exportieren")
+       3. DropDown "Diagramm konfigurieren" (Messages.MenuConfigureChart)
+          → Datenreihen-Auswahl + "Datenreihen zurücksetzen"
+            (Messages.MenuResetChartSeries)
+   - Titel: "Vermögensaufstellung - Historie (<configname>)"
+     (Messages.LabelStatementOfAssetsHistory)
+   - Untere Hälfte (addPanePages → InformationPane): SecurityPriceChart /
+     HistoricalPrices / Transactions / Trades / SecurityEvents = unsere
+     WertpapierDetailPane (Sash/SplitPane).
+
+   PP-Default (DataSeriesSet.buildStatementOfAssetsDataSeries): nur die
+   Gesamtsumme (TOTALS, schwarze Linie) ist sichtbar.
    ════════════════════════════════════════════════════════════════════════ */
 
-const VISIBLE_KEY = 'soa-history-visible';   // welche Reihen im Diagramm sind
-const HIDDEN_KEY = 'soa-history-hidden';     // davon temporär ausgeblendete
-const PERIOD_KEY = 'soa-history-period';      // gewählter Berichtszeitraum (key)
+const CFGSTORE_KEY = 'soa-history-cfgstore';
+const SERIES_KEY = 'soa-history-series';   // aktive Datenreihen-Auswahl (ConfigStore folgt diesem Key)
+const PERIOD_KEY = 'soa-history-period';
 
 type Period = { key: string; label: string; days: number | null };
 
@@ -42,25 +57,78 @@ const BUILTIN_PERIODS: Period[] = [
   { key: 'all', label: 'Gesamter Zeitraum', days: null },
 ];
 
-function loadSet(key: string, fallback: ReihenId[]): Set<ReihenId> {
+/* ── Datenreihen-Auswahl pro Konfiguration ──
+   Wir legen sie im SERIES_KEY im selben JSON-Format ab, das useConfigStore
+   snapshottet (order/hidden), damit der ConfigStore beim Konfig-Wechsel die
+   richtige Auswahl lädt: order = im Diagramm vorhandene Reihen,
+   hidden = davon temporär ausgeblendete. */
+interface SeriesSel { visible: ReihenId[]; hidden: ReihenId[]; }
+
+function defaultSel(): SeriesSel {
+  return { visible: REIHEN_META.filter(m => m.defaultAktiv).map(m => m.id), hidden: [] };
+}
+
+function loadSel(): SeriesSel {
   try {
-    const raw = localStorage.getItem(key);
-    if (raw) return new Set(JSON.parse(raw) as ReihenId[]);
+    const raw = localStorage.getItem(SERIES_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      const visible = (p.order ?? p.visible) as ReihenId[] | undefined;
+      if (visible) return { visible, hidden: (p.hidden ?? []) as ReihenId[] };
+    }
   } catch { /* */ }
-  return new Set(fallback);
+  return defaultSel();
+}
+
+function saveSel(sel: SeriesSel) {
+  // Format kompatibel zu useConfigStore (order/widths/sortCols/hidden).
+  try {
+    localStorage.setItem(SERIES_KEY, JSON.stringify({
+      order: sel.visible, widths: {}, sortCols: [], hidden: sel.hidden,
+    }));
+  } catch { /* */ }
 }
 
 export default function StatementOfAssetsHistoryView() {
   const { state, addBerichtszeitraum, updateWertpapier, deleteTransaktion, importTransaktionen } = usePortfolio();
 
-  // ── Sichtbare Reihen (im Diagramm vorhanden) ──
-  const defaultVisible = useMemo(() => REIHEN_META.filter(m => m.defaultAktiv).map(m => m.id), []);
-  const [visible, setVisible] = useState<Set<ReihenId>>(() => loadSet(VISIBLE_KEY, defaultVisible));
-  // ── Davon ausgeblendete (Legende-Klick) ──
-  const [hidden, setHidden] = useState<Set<ReihenId>>(() => loadSet(HIDDEN_KEY, []));
+  // ── Konfigurations-Store (PP DataSeriesConfigurator / ConfigurationStore) ──
+  // Bei Konfig-Wechsel schreibt der Store die Auswahl in SERIES_KEY; chartKey
+  // remountet das Diagramm, damit es die neue Auswahl übernimmt.
+  const [chartKey, setChartKey] = useState(0);
+  const configStore = useConfigStore(CFGSTORE_KEY, SERIES_KEY, () => setChartKey(k => k + 1));
 
-  useEffect(() => { try { localStorage.setItem(VISIBLE_KEY, JSON.stringify([...visible])); } catch { /* */ } }, [visible]);
-  useEffect(() => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch { /* */ } }, [hidden]);
+  return (
+    <HistoryChart
+      key={chartKey}
+      state={state}
+      configStore={configStore}
+      addBerichtszeitraum={addBerichtszeitraum}
+      updateWertpapier={updateWertpapier}
+      deleteTransaktion={deleteTransaktion}
+      importTransaktionen={importTransaktionen}
+    />
+  );
+}
+
+/* Innerer Chart — wird bei Konfig-Wechsel über chartKey neu gemountet und
+   liest dann die in SERIES_KEY abgelegte Datenreihen-Auswahl frisch ein. */
+function HistoryChart({
+  state, configStore, addBerichtszeitraum, updateWertpapier, deleteTransaktion, importTransaktionen,
+}: {
+  state: ReturnType<typeof usePortfolio>['state'];
+  configStore: ReturnType<typeof useConfigStore>;
+  addBerichtszeitraum: ReturnType<typeof usePortfolio>['addBerichtszeitraum'];
+  updateWertpapier: ReturnType<typeof usePortfolio>['updateWertpapier'];
+  deleteTransaktion: ReturnType<typeof usePortfolio>['deleteTransaktion'];
+  importTransaktionen: ReturnType<typeof usePortfolio>['importTransaktionen'];
+}) {
+  const initial = useMemo(() => loadSel(), []);
+  const [visible, setVisible] = useState<Set<ReihenId>>(() => new Set(initial.visible));
+  const [hidden, setHidden] = useState<Set<ReihenId>>(() => new Set(initial.hidden));
+
+  // Auswahl bei jeder Änderung in den ConfigStore-Key zurückschreiben.
+  useEffect(() => { saveSel({ visible: [...visible], hidden: [...hidden] }); }, [visible, hidden]);
 
   // ── Berichtszeitraum ──
   const extraPeriods = useMemo<Period[]>(
@@ -93,6 +161,17 @@ export default function StatementOfAssetsHistoryView() {
     const cutoffStr = cutoff.toISOString().slice(0, 10);
     return reihen.filter(p => p.datum >= cutoffStr);
   }, [reihen, activePeriod]);
+
+  // ── Jahres-Gitter (PP TimelineChart: vertikale Linien + Jahreszahl je Jahr) ──
+  const yearTicks = useMemo(() => {
+    const ticks: string[] = [];
+    let lastYear = '';
+    for (const p of chartData) {
+      const y = p.datum.slice(0, 4);
+      if (y !== lastYear) { ticks.push(p.datum); lastYear = y; }
+    }
+    return ticks;
+  }, [chartData]);
 
   // ── Welche Reihen werden tatsächlich gezeichnet ──
   const drawn = useMemo(
@@ -134,14 +213,15 @@ export default function StatementOfAssetsHistoryView() {
   }, []);
 
   const resetSeries = useCallback(() => {
-    setVisible(new Set(defaultVisible));
-    setHidden(new Set());
-  }, [defaultVisible]);
+    const d = defaultSel();
+    setVisible(new Set(d.visible));
+    setHidden(new Set(d.hidden));
+  }, []);
 
   // ── CSV-Export ──
   const exportCSV = useCallback(() => {
     if (chartData.length === 0) return;
-    const cols = drawn.length ? drawn : REIHEN_META.filter(m => visible.has(m.id));
+    const cols = REIHEN_META.filter(m => visible.has(m.id));
     const head = ['Datum', ...cols.map(c => c.label)].join(';');
     const rows = chartData.map(p =>
       [p.datum, ...cols.map(c => String(p[c.id]).replace('.', ','))].join(';'),
@@ -150,22 +230,40 @@ export default function StatementOfAssetsHistoryView() {
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'vermoegensaufstellung-diagramm.csv';
+    a.href = url; a.download = 'vermoegensaufstellung-historie.csv';
     a.click();
     URL.revokeObjectURL(url);
     setExportOpen(false);
-  }, [chartData, drawn, visible]);
+  }, [chartData, visible]);
+
+  const fmtTick = (d: string) => d.slice(0, 4); // Jahreszahl
 
   return (
     <div className="flex flex-col h-full">
-      {/* ── Toolbar ── */}
+      {/* ── Toolbar (PP createHeader) ── */}
       <div className="flex items-center px-2 py-[3px] gap-2 overflow-hidden"
         style={{ borderBottom: '1px solid var(--pp-border)', background: 'var(--pp-header-bg)' }}>
+        {/* 1. Titel mit aktivem Konfigurationsnamen */}
         <span className="text-[12px] font-semibold whitespace-nowrap flex-shrink-0" style={{ color: 'var(--pp-text)' }}>
-          Vermögensaufstellung — Diagramm
+          Vermögensaufstellung - Historie ({configStore.activeName})
         </span>
+
         <div className="ml-auto flex items-center gap-1 flex-shrink-0">
-          {/* Berichtszeitraum-DropDown (PP ReportingPeriodDropDown) */}
+          {/* 2. viewToolBar: ConfigStore-Buttons (DataSeriesConfigurator) */}
+          <ConfigStoreDropDowns
+            configs={configStore.configs}
+            activeId={configStore.activeId}
+            onActivate={configStore.activate}
+            onDuplicate={configStore.createNew}
+            onRename={configStore.rename}
+            onDelete={configStore.remove}
+            onBringToFront={configStore.bringToFront}
+            onNew={() => configStore.createNew(null)}
+          />
+          <div style={{ width: 1, height: 16, background: 'var(--pp-border)', margin: '0 4px', flexShrink: 0 }} />
+
+          {/* 3. actionToolBar: ReportingPeriod · Export · Diagramm konfigurieren */}
+          {/* ReportingPeriodDropDown */}
           <div className="relative">
             <button className="pp-toolbar-btn flex items-center gap-1 px-2" style={{ width: 'auto' }}
               title="Berichtszeitraum" onClick={() => { setPeriodOpen(o => !o); setExportOpen(false); setConfigOpen(false); }}>
@@ -187,7 +285,7 @@ export default function StatementOfAssetsHistoryView() {
               </DropMenu>
             )}
           </div>
-          {/* Export-DropDown */}
+          {/* Export-DropDown (Messages.MenuExportData) */}
           <div className="relative">
             <button className="pp-toolbar-btn" title="Daten exportieren"
               onClick={() => { setExportOpen(o => !o); setPeriodOpen(false); setConfigOpen(false); }}>
@@ -199,7 +297,7 @@ export default function StatementOfAssetsHistoryView() {
               </DropMenu>
             )}
           </div>
-          {/* Diagramm konfigurieren */}
+          {/* Diagramm konfigurieren (Messages.MenuConfigureChart) */}
           <div className="relative">
             <button className="pp-toolbar-btn" title="Diagramm konfigurieren"
               onClick={() => { setConfigOpen(o => !o); setPeriodOpen(false); setExportOpen(false); }}>
@@ -221,7 +319,8 @@ export default function StatementOfAssetsHistoryView() {
                   ))}
                 </div>
                 <div style={{ borderTop: '1px solid var(--pp-border)', margin: '3px 0' }} />
-                <DropItem onClick={resetSeries}>Auf Standard zurücksetzen</DropItem>
+                {/* Messages.MenuResetChartSeries */}
+                <DropItem onClick={resetSeries}>Datenreihen zurücksetzen</DropItem>
               </DropMenu>
             )}
           </div>
@@ -232,7 +331,7 @@ export default function StatementOfAssetsHistoryView() {
         <ReportingPeriodDialog onClose={() => setShowPeriodDialog(false)} onSelect={addPeriod} />
       )}
 
-      <SplitPane storageKey="soa-history" defaultTopPercent={62}
+      <SplitPane storageKey="soa-history" defaultTopPercent={70}
         top={
           <div className="flex flex-col h-full">
             {chartData.length === 0 ? (
@@ -244,19 +343,23 @@ export default function StatementOfAssetsHistoryView() {
                 <div className="flex-1 p-3 min-h-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={chartData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--pp-border)" />
-                      <XAxis dataKey="datum" tickFormatter={(d: string) => datumKurz(new Date(d))}
-                        tick={{ fontSize: 10, fill: 'var(--pp-text-muted)' }} tickLine={false} interval="preserveStartEnd" minTickGap={40} />
-                      <YAxis tickFormatter={(v: number) => euro(v)} tick={{ fontSize: 10, fill: 'var(--pp-text-muted)' }} tickLine={false} width={90} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--pp-border)" vertical={false} />
+                      {/* Jahres-Gitter: gestrichelte vertikale Linien am Jahreswechsel */}
+                      {yearTicks.map(t => (
+                        <ReferenceLine key={t} x={t} stroke="var(--pp-border)" strokeDasharray="4 3" />
+                      ))}
+                      <XAxis dataKey="datum" tickFormatter={fmtTick} ticks={yearTicks}
+                        tick={{ fontSize: 10, fill: 'var(--pp-text-muted)' }} tickLine={false} />
+                      <YAxis tickFormatter={(v: number) => euro(v)} tick={{ fontSize: 10, fill: 'var(--pp-text-muted)' }} tickLine={false} width={90} orientation="right" />
                       <Tooltip
-                        labelFormatter={(d) => datumKurz(new Date(d as string))}
+                        labelFormatter={(d) => formatDate(d as string)}
                         formatter={(value, name) => [euro(value as number), REIHEN_META_BY_ID[name as ReihenId]?.label ?? String(name)]}
                         contentStyle={{ fontSize: '11px', background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }}
                       />
                       {/* Reihenfolge: erst Flächen, dann Balken, dann Linien (oben) */}
                       {drawn.filter(m => m.typ === 'area').map(m => (
                         <Area key={m.id} type="stepAfter" dataKey={m.id} stroke={m.farbe} strokeWidth={1.5}
-                          fill={m.farbe} fillOpacity={0.12} dot={false} isAnimationActive={false} />
+                          fill={m.farbe} fillOpacity={0.18} dot={false} isAnimationActive={false} />
                       ))}
                       {drawn.filter(m => m.typ === 'bar').map(m => (
                         <Bar key={m.id} dataKey={m.id} fill={m.farbe} isAnimationActive={false} />
@@ -269,7 +372,7 @@ export default function StatementOfAssetsHistoryView() {
                   </ResponsiveContainer>
                 </div>
                 {/* ── Legende (PP: Marker + Name, Klick = aus-/einblenden, X = entfernen) ── */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 overflow-y-auto"
+                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-3 py-2 overflow-y-auto"
                   style={{ borderTop: '1px solid var(--pp-border)', maxHeight: 84, flexShrink: 0 }}>
                   {REIHEN_META.filter(m => visible.has(m.id)).map(m => {
                     const isHidden = hidden.has(m.id);
@@ -298,8 +401,6 @@ export default function StatementOfAssetsHistoryView() {
           </div>
         }
         bottom={
-          // PP StatementOfAssetsHistoryView teilt sich die untere Pane mit der
-          // Tabellenansicht (Wertpapier-Detail). Ohne Selektion: leerer Detail.
           <WertpapierDetailPane
             wp={null}
             onUpdateWertpapier={updateWertpapier}
@@ -311,6 +412,12 @@ export default function StatementOfAssetsHistoryView() {
       />
     </div>
   );
+}
+
+function formatDate(d: string): string {
+  // d = 'YYYY-MM-DD' → 'DD.MM.YYYY'
+  const [y, m, day] = d.split('-');
+  return `${day}.${m}.${y}`;
 }
 
 /* ── Kleines Dropdown-Menü (Klick außerhalb schließt) ── */

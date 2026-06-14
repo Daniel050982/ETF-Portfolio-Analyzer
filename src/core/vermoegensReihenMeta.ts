@@ -19,34 +19,39 @@ export interface ReihenMeta {
 
 /* Reihenfolge = PP DataSeriesSet.buildStatementOfAssetsDataSeries. */
 export const REIHEN_META: ReihenMeta[] = [
+  // Farben/Typen 1:1 aus PP DataSeriesSet.buildStatementOfAssetsDataSeries +
+  // Colors.java: TOTALS=schwarz, TRANSFERALS=DARK_GRAY (Balken),
+  // TRANSFERALS_ACCUMULATED=GELB (Fläche), INVESTED_CAPITAL/ABSOLUTE=GRAY
+  // (Fläche), DELTA=GRAY (Linie), TAXES=RED, DIVIDENDS=DARK_MAGENTA,
+  // INTEREST/INTEREST_CHARGE/EARNINGS=DARK_GREEN, FEES=GRAY.
   { id: 'TOTALS',                      label: 'Gesamtsumme',                          farbe: '#000000', typ: 'line', defaultAktiv: true },
 
-  { id: 'TRANSFERALS',                 label: 'Einlagen / Entnahmen',                 farbe: '#808080', typ: 'bar',  defaultAktiv: false },
-  { id: 'TRANSFERALS_ACCUMULATED',     label: 'Einlagen / Entnahmen (akkumuliert)',   farbe: '#CCCC00', typ: 'area', defaultAktiv: false },
+  { id: 'TRANSFERALS',                 label: 'Einlagen / Entnahmen',                 farbe: '#595959', typ: 'bar',  defaultAktiv: false },
+  { id: 'TRANSFERALS_ACCUMULATED',     label: 'Einlagen / Entnahmen (akkumuliert)',   farbe: '#FFFF00', typ: 'area', defaultAktiv: false },
 
-  { id: 'INVESTED_CAPITAL',            label: 'Investiertes Kapital',                 farbe: '#A0A0A0', typ: 'area', defaultAktiv: false },
-  { id: 'ABSOLUTE_INVESTED_CAPITAL',   label: 'Investiertes Kapital (gesamt)',        farbe: '#A0A0A0', typ: 'area', defaultAktiv: false },
+  { id: 'INVESTED_CAPITAL',            label: 'Investiertes Kapital',                 farbe: '#808080', typ: 'area', defaultAktiv: false },
+  { id: 'ABSOLUTE_INVESTED_CAPITAL',   label: 'Investiertes Kapital (gesamt)',        farbe: '#808080', typ: 'area', defaultAktiv: false },
 
-  { id: 'ABSOLUTE_DELTA',              label: 'Absolute Wertentwicklung',             farbe: '#606060', typ: 'line', defaultAktiv: false },
-  { id: 'ABSOLUTE_DELTA_ALL_RECORDS',  label: 'Absolute Wertentwicklung (gesamt)',    farbe: '#606060', typ: 'line', defaultAktiv: false },
+  { id: 'ABSOLUTE_DELTA',              label: 'Absolute Wertentwicklung',             farbe: '#808080', typ: 'line', defaultAktiv: false },
+  { id: 'ABSOLUTE_DELTA_ALL_RECORDS',  label: 'Absolute Wertentwicklung (gesamt)',    farbe: '#808080', typ: 'line', defaultAktiv: false },
 
   { id: 'DIVIDENDS',                   label: 'Dividenden',                           farbe: '#8B008B', typ: 'bar',  defaultAktiv: false },
   { id: 'DIVIDENDS_ACCUMULATED',       label: 'Dividenden (akkumuliert)',             farbe: '#8B008B', typ: 'line', defaultAktiv: false },
 
-  { id: 'INTEREST',                    label: 'Zinsen',                               farbe: '#006400', typ: 'bar',  defaultAktiv: false },
-  { id: 'INTEREST_ACCUMULATED',        label: 'Zinsen (akkumuliert)',                 farbe: '#006400', typ: 'line', defaultAktiv: false },
+  { id: 'INTEREST',                    label: 'Zinsen',                               farbe: '#008000', typ: 'bar',  defaultAktiv: false },
+  { id: 'INTEREST_ACCUMULATED',        label: 'Zinsen (akkumuliert)',                 farbe: '#008000', typ: 'line', defaultAktiv: false },
 
-  { id: 'INTEREST_CHARGE',             label: 'Zinsbelastung',                        farbe: '#228B22', typ: 'bar',  defaultAktiv: false },
-  { id: 'INTEREST_CHARGE_ACCUMULATED', label: 'Zinsbelastung (akkumuliert)',          farbe: '#228B22', typ: 'line', defaultAktiv: false },
+  { id: 'INTEREST_CHARGE',             label: 'Zinsbelastung',                        farbe: '#008000', typ: 'bar',  defaultAktiv: false },
+  { id: 'INTEREST_CHARGE_ACCUMULATED', label: 'Zinsbelastung (akkumuliert)',          farbe: '#008000', typ: 'line', defaultAktiv: false },
 
-  { id: 'EARNINGS',                    label: 'Erträge',                              farbe: '#00688B', typ: 'bar',  defaultAktiv: false },
-  { id: 'EARNINGS_ACCUMULATED',        label: 'Erträge (akkumuliert)',                farbe: '#00688B', typ: 'line', defaultAktiv: false },
+  { id: 'EARNINGS',                    label: 'Erträge',                              farbe: '#008000', typ: 'bar',  defaultAktiv: false },
+  { id: 'EARNINGS_ACCUMULATED',        label: 'Erträge (akkumuliert)',                farbe: '#008000', typ: 'line', defaultAktiv: false },
 
   { id: 'TAXES',                       label: 'Steuern',                              farbe: '#FF0000', typ: 'bar',  defaultAktiv: false },
   { id: 'TAXES_ACCUMULATED',           label: 'Steuern (akkumuliert)',                farbe: '#FF0000', typ: 'line', defaultAktiv: false },
 
-  { id: 'FEES',                        label: 'Gebühren',                             farbe: '#A9A9A9', typ: 'bar',  defaultAktiv: false },
-  { id: 'FEES_ACCUMULATED',            label: 'Gebühren (akkumuliert)',               farbe: '#A9A9A9', typ: 'line', defaultAktiv: false },
+  { id: 'FEES',                        label: 'Gebühren',                             farbe: '#808080', typ: 'bar',  defaultAktiv: false },
+  { id: 'FEES_ACCUMULATED',            label: 'Gebühren (akkumuliert)',               farbe: '#808080', typ: 'line', defaultAktiv: false },
 ];
 
 export const REIHEN_META_BY_ID: Record<ReihenId, ReihenMeta> =
