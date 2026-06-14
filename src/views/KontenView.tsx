@@ -472,7 +472,22 @@ export default function KontenView() {
   // PP notifyViewCreationCompleted(): erste Zeile wird automatisch selektiert
   const selectedKey = selected ?? konten[0]?.key ?? null;
 
-  const buchungenRows = useMemo((): TxRow[] => {
+  // Wertpapier-Lookup (Symbol/WKN) — unabhängig vom gewählten Konto, daher
+  // separat memoisiert (wird nicht bei jeder Suche/Filter neu gebaut).
+  const wpLookup = useMemo(() => {
+    const byIsin = new Map<string, { symbol?: string; wkn?: string }>();
+    const byName = new Map<string, { symbol?: string; wkn?: string }>();
+    for (const wp of Object.values(state.wertpapiere)) {
+      if (wp.isin) byIsin.set(wp.isin, wp);
+      byName.set(wp.name, wp);
+    }
+    return { byIsin, byName };
+  }, [state.wertpapiere]);
+
+  // Alle Buchungen des gewählten Kontos mit kumulativem Saldo + Symbol/WKN.
+  // Teuer (Saldo-Durchlauf über alle Buchungen) → nur bei Kontowechsel bzw.
+  // Datenänderung, NICHT bei jeder Such-/Filtereingabe.
+  const kontoTxRows = useMemo((): TxRow[] => {
     if (!selectedKey) return [];
     const konto = state.konten[selectedKey];
     const kontoTxs = konto ? konto.transaktionen : state.transaktionen;
@@ -486,32 +501,29 @@ export default function KontenView() {
       balanceById.set(tx.id, saldo);
     }
 
-    // Wertpapier-Lookup für Symbol/WKN-Spalten
-    const byIsin = new Map<string, { symbol?: string; wkn?: string }>();
-    const byName = new Map<string, { symbol?: string; wkn?: string }>();
-    for (const wp of Object.values(state.wertpapiere)) {
-      if (wp.isin) byIsin.set(wp.isin, wp);
-      byName.set(wp.name, wp);
-    }
-
-    let list = [...kontoTxs];
-    const crit = getTransactionFilter(txFilter);
-    list = list.filter(tx => crit.matches(tx));
-    if (search) {
-      const q = search.toLowerCase();
-      list = list.filter(tx =>
-        tx.wertpapierName.toLowerCase().includes(q) ||
-        tx.isin.toLowerCase().includes(q) ||
-        (tx.notiz ?? '').toLowerCase().includes(q) ||
-        (TX_LABELS[tx.typ] ?? tx.typ).toLowerCase().includes(q)
-      );
-    }
-    list.sort((a, b) => b.datum.getTime() - a.datum.getTime());
-    return list.map(tx => {
-      const wp = (tx.isin && byIsin.get(tx.isin)) || byName.get(tx.wertpapierName);
+    // bereits absteigend sortiert zurückgeben (Anzeige-Reihenfolge)
+    const desc = [...kontoTxs].sort((a, b) => b.datum.getTime() - a.datum.getTime());
+    return desc.map(tx => {
+      const wp = (tx.isin && wpLookup.byIsin.get(tx.isin)) || wpLookup.byName.get(tx.wertpapierName);
       return { tx, kontostand: balanceById.get(tx.id) ?? 0, symbol: wp?.symbol ?? '', wkn: wp?.wkn ?? '' };
     });
-  }, [state.konten, state.transaktionen, state.wertpapiere, selectedKey, search, txFilter]);
+  }, [state.konten, state.transaktionen, selectedKey, wpLookup]);
+
+  // Such-/Filter-Anwendung auf die vorbereiteten Zeilen — billig.
+  const buchungenRows = useMemo((): TxRow[] => {
+    const crit = getTransactionFilter(txFilter);
+    let list = kontoTxRows.filter(r => crit.matches(r.tx));
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(r =>
+        r.tx.wertpapierName.toLowerCase().includes(q) ||
+        r.tx.isin.toLowerCase().includes(q) ||
+        (r.tx.notiz ?? '').toLowerCase().includes(q) ||
+        (TX_LABELS[r.tx.typ] ?? r.tx.typ).toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [kontoTxRows, search, txFilter]);
 
   const balanceHistory = useMemo(() => {
     if (!selectedKey) return [];
