@@ -96,9 +96,8 @@ export function ConfigStoreDropDowns({ configs, activeId, onActivate, onDuplicat
               }
               nodes.push({ kind: 'action', label: 'Ansicht duplizieren', onClick: () => { onDuplicate(cfg.id); close(); } });
               nodes.push({ kind: 'action', label: 'Ansicht umbenennen', onClick: () => { onRename(cfg.id); close(); } });
-              if (configs.length > 1) {
-                nodes.push({ kind: 'action', label: 'Ansicht löschen', danger: true, onClick: () => { onDelete(cfg.id); close(); } });
-              }
+              // PP: "Ansicht löschen" immer vorhanden (löscht die letzte → neue Standard)
+              nodes.push({ kind: 'action', label: 'Ansicht löschen', danger: true, onClick: () => { onDelete(cfg.id); close(); } });
               if (idx > 0) {
                 nodes.push({ kind: 'separator' });
                 nodes.push({ kind: 'action', label: 'Ganz nach vorne', onClick: () => { onBringToFront(cfg.id); close(); } });

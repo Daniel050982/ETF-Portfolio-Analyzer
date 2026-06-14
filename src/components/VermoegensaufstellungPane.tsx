@@ -24,6 +24,20 @@ import {
 
 export interface KontoRow { name: string; saldo: number; farbe?: string }
 
+/* Anlageklassen-Labels für die eingebaute "Wertpapierart"-Gruppierung
+   (Tool-typ → PP-Kategorienamen wie in der Standard-Taxonomie). */
+const TYP_LABELS: Record<string, string> = {
+  ETF: 'Exchange Traded Fund',
+  Krypto: 'Kryptowährung',
+  Aktie: 'Aktie',
+  Fonds: 'Fonds',
+  Anleihe: 'Anleihe',
+  Optionsschein: 'Optionsschein',
+  Index: 'Index',
+  Währung: 'Währung',
+  Sonstige: 'Sonstige',
+};
+
 interface Props {
   storageKey: string;
   positions: DepotPosition[];
@@ -90,9 +104,17 @@ export function VermoegensaufstellungPane({
 
   const setKlass = (v: string) => { setKlassifizierung(v); try { localStorage.setItem(`${storageKey}-klass`, v); } catch { /* */ } };
 
+  // "Wertpapierart" gibt es als echte Taxonomie (Sidebar → Klassifizierungen).
+  // Ist sie nicht vorhanden, bieten wir eine eingebaute Gruppierung nach
+  // Anlageklasse (typ-Feld) als Fallback an, damit die Unterteilung wie in PP
+  // immer verfügbar ist. Doppelung wird so vermieden.
+  const hatWertpapierartTaxonomie = taxonomien.some(t => t.name === 'Wertpapierart');
   const menuNodes: MenuNode[] = [
     { kind: 'header', label: 'Klassifizierungen' },
     { kind: 'radio', label: '(keine)', selected: klassifizierung === 'keine', onSelect: () => setKlass('keine') },
+    ...(hatWertpapierartTaxonomie ? [] : [{
+      kind: 'radio' as const, label: 'Wertpapierart', selected: klassifizierung === '__typ__', onSelect: () => setKlass('__typ__'),
+    }]),
     ...taxonomien.map((t): MenuNode => ({ kind: 'radio', label: t.name, selected: klassifizierung === t.id, onSelect: () => setKlass(t.id) })),
     { kind: 'header', label: 'Spalten' },
     check('bestand'), check('name'), check('symbol'), check('isin'), check('wkn'),
@@ -267,6 +289,13 @@ export function VermoegensaufstellungPane({
   const groups = new Map<string, DepotPosition[]>();
   if (klassifizierung === 'keine') {
     groups.set('', positions);
+  } else if (klassifizierung === '__typ__') {
+    // Eingebaute "Wertpapierart"-Gruppierung nach Anlageklasse (typ-Feld).
+    for (const p of positions) {
+      const g = TYP_LABELS[p.typ] ?? p.typ ?? 'Sonstige';
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g)!.push(p);
+    }
   } else {
     const lookup = klassByTax.get(klassifizierung);
     for (const p of positions) {

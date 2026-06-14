@@ -127,12 +127,15 @@ export function useConfigStore(storageKey: string, columnsStorageKey: string, on
   }, [state, commit]);
 
   const remove = useCallback((id: string) => {
-    if (state.configs.length <= 1) return; // Standard nicht löschbar
-    const remaining = state.configs.filter(c => c.id !== id);
-    const activeId = state.activeId === id ? remaining[0].id : state.activeId;
-    if (state.activeId === id) applySnapshotToColumns(columnsStorageKey, remaining[0].snapshot);
+    // PP ConfigurationStore.delete: löscht die Ansicht; war es die letzte, wird
+    // automatisch eine neue "Standard"-Ansicht angelegt.
+    let remaining = state.configs.filter(c => c.id !== id);
+    if (remaining.length === 0) remaining = [{ id: 'standard', name: STANDARD_NAME, snapshot: emptySnapshot() }];
+    const wasActive = state.activeId === id;
+    const activeId = wasActive ? remaining[0].id : state.activeId;
+    if (wasActive) applySnapshotToColumns(columnsStorageKey, remaining[0].snapshot);
     commit({ configs: remaining, activeId });
-    if (state.activeId === id) onActivated();
+    if (wasActive) onActivated();
   }, [state, columnsStorageKey, commit, onActivated]);
 
   const bringToFront = useCallback((id: string) => {
