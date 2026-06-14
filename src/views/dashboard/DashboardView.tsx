@@ -12,7 +12,7 @@ import { DashboardCalc } from './dashboardData';
 import type { DashboardContextData } from './dashboardData';
 import { widgetByType, WIDGET_FACTORY, GROUP_ORDER } from './widgetFactory';
 import { buildIndicatorDashboard, DASHBOARD_TEMPLATES, newDashboardId } from './dashboardTemplates';
-import { Plus } from 'lucide-react';
+import { SquarePlus } from 'lucide-react';
 
 /* Tiefe Kopie eines Dashboards (für unveränderliche Updates). */
 function cloneDashboard(d: Dashboard): Dashboard {
@@ -387,7 +387,7 @@ function DashboardTabs({ dashboards, activeId, onSelect, onNew, onRename, onDele
           </button>
         );
       })}
-      <button onClick={openNewMenu} className="pp-toolbar-btn" title="Neues Dashboard"><Plus size={14} /></button>
+      <button onClick={openNewMenu} className="pp-toolbar-btn" title="Neues Dashboard"><SquarePlus size={14} /></button>
       {menu && (
         <div style={{ position: 'fixed', left: menu.x, top: menu.y, width: 0, height: 0, zIndex: 9000 }}>
           <div style={{ position: 'relative' }}>

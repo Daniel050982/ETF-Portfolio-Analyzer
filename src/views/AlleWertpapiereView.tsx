@@ -9,7 +9,7 @@ import { euro, kurs, stueck, datumKurz, prozent } from '../utils/format';
 import type { Wertpapier, Transaktion, Klassifizierung, Taxonomie, KursEintrag } from '../types/portfolio';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceDot } from 'recharts';
 
-import { Download, Plus, Search, Crosshair, Ruler, EyeOff, Eye, RefreshCw } from 'lucide-react';
+import { Download, Plus, SquarePlus, Search, Crosshair, Ruler, EyeOff, Eye, RefreshCw } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Hilfsfunktionen
@@ -616,10 +616,10 @@ function ViewConfigButtons({ storageKey, onActiveChange }: { storageKey: string;
           </div>
         );
       })}
-      {/* PP: VIEW_PLUS — ConfigurationNew */}
+      {/* PP: VIEW_PLUS — ConfigurationNew (Fenster + Plus, eigenes Symbol) */}
       <button className="pp-toolbar-btn" title="Neue Ansicht"
         onClick={() => createNew(null)}>
-        <Plus size={14} />
+        <SquarePlus size={14} />
       </button>
     </div>
   );

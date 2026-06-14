@@ -2,7 +2,7 @@
    1:1: Basiswährungs-DropDown, TimeMachine-DropDown, ClientFilter-DropDown. */
 import { useState } from 'react';
 import { HierarchyMenu, type MenuNode } from './HierarchyMenu';
-import { Calendar, CalendarClock, Layers, Plus } from 'lucide-react';
+import { Calendar, CalendarClock, Layers, SquarePlus } from 'lucide-react';
 import { datumKurz } from '../utils/format';
 import type { StoredConfig } from './useConfigStore';
 
@@ -108,7 +108,7 @@ export function ConfigStoreDropDowns({ configs, activeId, onActivate, onDuplicat
           />
         );
       })}
-      <button className="pp-toolbar-btn" title="Neue Ansicht" onClick={onNew}><Plus size={14} /></button>
+      <button className="pp-toolbar-btn" title="Neue Ansicht" onClick={onNew}><SquarePlus size={14} /></button>
     </div>
   );
 }
