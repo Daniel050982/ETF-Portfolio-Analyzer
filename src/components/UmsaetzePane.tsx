@@ -135,7 +135,9 @@ export function useUmsaetze({ transaktionen, symbolWknOf, storageKey, exportFile
   );
 
   const table = rows.length > 0 ? (
-    <div className="flex-1 min-h-0">
+    // flex flex-col: PPTable's flex-1-Scroller braucht einen Flex-Eltern, sonst
+    // wächst er auf volle Inhaltshöhe und die Virtualisierung greift nicht.
+    <div className="flex-1 min-h-0 flex flex-col">
       <PPTable
         columns={COLUMNS} data={rows} rowKey={rowKey}
         storageKey={storageKey} hiddenByDefault={HIDDEN_BY_DEFAULT}

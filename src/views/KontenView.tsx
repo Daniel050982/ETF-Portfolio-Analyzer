@@ -490,7 +490,11 @@ export default function KontenView() {
   const kontoTxRows = useMemo((): TxRow[] => {
     if (!selectedKey) return [];
     const konto = state.konten[selectedKey];
-    const kontoTxs = konto ? konto.transaktionen : state.transaktionen;
+    // Buchungen des Kontos: bevorzugt aus konto.transaktionen; ist das leer
+    // (z.B. nach Supabase-Load), aus state.transaktionen nach kontoName filtern.
+    let kontoTxs = konto && konto.transaktionen.length > 0
+      ? konto.transaktionen
+      : state.transaktionen.filter(tx => tx.kontoName === selectedKey);
 
     // PP updateBalance(): aufsteigend sortieren, Saldo nach jeder Buchung
     const asc = [...kontoTxs].sort((a, b) => a.datum.getTime() - b.datum.getTime());
@@ -655,15 +659,21 @@ export default function KontenView() {
               </>
             ) : undefined}
           />
-          {/* overflow-auto wie in Depots: bei der PPTable scrollt deren eigener
-              Scroller (flex-1 min-h-0 füllt den Container, der äußere läuft nicht
-              über); für rohe Tab-Inhalte (Diagramm) bleibt das Scrollen hier. */}
-          <div className="flex-1 overflow-auto flex flex-col">
+          {/* min-h-0 ist ENTSCHEIDEND: ohne es wächst dieser flex-1-Container auf
+              die Inhaltshöhe (min-height:auto), der PPTable-Scroller bekommt dann
+              die volle Tabellenhöhe als clientHeight → die Virtualisierung
+              deaktiviert sich und es werden ALLE Zeilen gerendert (bei tausenden
+              Buchungen sekundenlanges Hängen). min-h-0 begrenzt die Höhe auf den
+              Viewport, sodass PPTable nur die sichtbaren Zeilen rendert. */}
+          <div className="flex-1 min-h-0 overflow-auto flex flex-col">
 
             {detailTab === 'umsaetze' && (
               <>
                 {buchungenRows.length > 0 ? (
-                  <div className="flex-1 min-h-0">
+                  // flex flex-col: PPTable's eigener flex-1-Scroller braucht einen
+                  // Flex-Eltern, sonst nimmt er die volle Inhaltshöhe an und die
+                  // Virtualisierung greift nicht.
+                  <div className="flex-1 min-h-0 flex flex-col">
                     <PPTable
                       columns={TX_COLUMNS} data={buchungenRows} rowKey={txRowKey}
                       storageKey="konten-umsaetze" hiddenByDefault={TX_HIDDEN_BY_DEFAULT}

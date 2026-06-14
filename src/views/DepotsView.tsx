@@ -1603,7 +1603,7 @@ export default function DepotsView() {
         {detailTab === 'umsaetze' && (
           <>
             {depotTxRows.length > 0 ? (
-              <div className="flex-1 min-h-0">
+              <div className="flex-1 min-h-0 flex flex-col">
                 <PPTable
                   columns={DEPOT_TX_COLUMNS} data={depotTxRows} rowKey={depotTxRowKey}
                   storageKey="depots-umsaetze" hiddenByDefault={DEPOT_TX_HIDDEN_BY_DEFAULT}
