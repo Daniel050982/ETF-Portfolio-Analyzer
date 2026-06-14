@@ -529,11 +529,17 @@ export default function KontenView() {
     return list;
   }, [kontoTxRows, search, txFilter]);
 
+  // Saldo-Verlauf nur berechnen, wenn der Diagramm-Tab aktiv ist (sonst
+  // unnötige Arbeit bei jedem Kontowechsel). Buchungen über kontoName, falls
+  // konto.transaktionen leer ist (z.B. nach Supabase-Load).
   const balanceHistory = useMemo(() => {
-    if (!selectedKey) return [];
+    if (!selectedKey || detailTab !== 'kontosaldenverlauf') return [];
     const konto = state.konten[selectedKey];
-    return computeBalanceHistory(konto ? konto.transaktionen : state.transaktionen);
-  }, [state.konten, state.transaktionen, selectedKey]);
+    const txs = konto && konto.transaktionen.length > 0
+      ? konto.transaktionen
+      : state.transaktionen.filter(tx => tx.kontoName === selectedKey);
+    return computeBalanceHistory(txs);
+  }, [state.konten, state.transaktionen, selectedKey, detailTab]);
 
   const selectedKonto = konten.find(k => k.key === selectedKey);
 
