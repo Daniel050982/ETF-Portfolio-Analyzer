@@ -10,7 +10,7 @@ import BuchungenView from './views/BuchungenView';
 import VermoegensuebersichtView from './views/VermoegensuebersichtView';
 import PerformanceChartView from './views/PerformanceChartView';
 import PerformanceBerechnungView from './views/PerformanceBerechnungView';
-import VerteilungView from './views/VerteilungView';
+import StatementOfAssetsHistoryView from './views/StatementOfAssetsHistoryView';
 import SteuerView from './views/SteuerView';
 import SteuerPositionenView from './views/SteuerPositionenView';
 import ImportView from './views/ImportView';
@@ -49,7 +49,7 @@ function ViewRouter({ view }: { view: ViewId }) {
     case 'vermoegensuebersicht':
       return <VermoegensuebersichtView />;
     case 'diagramm-berichte':
-      return <VerteilungView />;
+      return <StatementOfAssetsHistoryView />;
     case 'bestand':
       return <BestandView />;
     case 'performance-dashboard':
