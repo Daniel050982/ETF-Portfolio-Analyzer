@@ -79,7 +79,11 @@ export function VermoegensaufstellungPane({
   const [neuPeriodeDialog, setNeuPeriodeDialog] = useState<string | null>(null);
   const [summeOben, setSummeOben] = useState(() => { try { return localStorage.getItem(`${storageKey}-summe-oben`) === 'true'; } catch { return false; } });
   const [summeUnten, setSummeUnten] = useState(() => { try { return localStorage.getItem(`${storageKey}-summe-unten`) !== 'false'; } catch { return true; } });
-  const [klassifizierung, setKlassifizierung] = useState(() => { try { return localStorage.getItem(`${storageKey}-klass`) ?? defaultKlassifizierung; } catch { return defaultKlassifizierung; } });
+  // Klassifizierungs-Auswahl. Versionierter Key (-klass2), damit bestehende
+  // Nutzer mit altem implizitem "keine"-Zustand einmalig den neuen Default
+  // (PP: Gruppierung nach Wertpapierart) bekommen; spätere bewusste Änderungen
+  // bleiben erhalten.
+  const [klassifizierung, setKlassifizierung] = useState(() => { try { return localStorage.getItem(`${storageKey}-klass2`) ?? defaultKlassifizierung; } catch { return defaultKlassifizierung; } });
 
   // Gesamtvolumen = Marktwerte aller Positionen + Konto-Salden (für Anteil)
   const totalVolumen = useMemo(
@@ -109,7 +113,7 @@ export function VermoegensaufstellungPane({
   const periodIds = (metrics: PeriodMetric[]): string[] =>
     metrics.flatMap(m => reportPeriods.map(per => `${m.id}_${per.key}`));
 
-  const setKlass = (v: string) => { setKlassifizierung(v); try { localStorage.setItem(`${storageKey}-klass`, v); } catch { /* */ } };
+  const setKlass = (v: string) => { setKlassifizierung(v); try { localStorage.setItem(`${storageKey}-klass2`, v); } catch { /* */ } };
 
   // "Wertpapierart" wird IMMER als eingebaute Gruppierung nach Anlageklasse
   // (typ-Feld) angeboten — das ist robust (typ ist stets gesetzt) und
