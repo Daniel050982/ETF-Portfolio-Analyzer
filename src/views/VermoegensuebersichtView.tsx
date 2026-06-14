@@ -1,9 +1,9 @@
 import { useMemo, useState, useCallback } from 'react';
 import { usePortfolio } from '../store/PortfolioContext';
 import { SplitPane } from '../components/SplitPane';
-import { TabBar } from '../components/PPElements';
 import { HierarchyMenu, type MenuNode } from '../components/HierarchyMenu';
 import { VermoegensaufstellungPane, type KontoRow } from '../components/VermoegensaufstellungPane';
+import { WertpapierDetailPane } from '../components/WertpapierDetailPane';
 import {
   BaseCurrencyDropDown, TimeMachineDropDown, ClientFilterDropDown, ConfigStoreDropDowns,
   ENTIRE_PORTFOLIO, type ClientFilterValue,
@@ -11,10 +11,7 @@ import {
 import { useConfigStore } from '../components/useConfigStore';
 import { computeDepotPositions } from '../components/vermoegenLogic';
 import type { ReportingPeriodResult } from '../components/ReportingPeriodDialog';
-import { euro, datumKurz, stueck } from '../utils/format';
 import { Download, Settings } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer } from 'recharts';
-import type { Transaktion } from '../types/portfolio';
 
 const ASSET_STORAGE_KEY = 'vermoegen-uebersicht-asset';
 
@@ -27,36 +24,18 @@ const ASSET_STORAGE_KEY = 'vermoegen-uebersicht-asset';
    Tabelle samt allen Spalten, Klassifizierungs-Gruppierung, Summen-Toggles und
    Konto-/Cash-Zeilen rendert.
 
-   Untere Hälfte (PP addPanePages): Detail-Tabs für die selektierte Position —
-   Kursdiagramm, Buchungen, Trades, Ereignisse.
+   Untere Hälfte (PP addPanePages == SecurityListView): derselbe Detail-Bereich
+   wie in "Alle Wertpapiere" via WertpapierDetailPane (Chart + Werkzeuge, 6 Tabs:
+   Diagramm, Historische Kurse, Umsätze, Trades, Ereignisse, Datenqualität).
    ════════════════════════════════════════════════════════════════════════ */
 
-const SHARES_ADD = new Set(['kauf', 'umbuchung_ein']);
-const SHARES_SUB = new Set(['verkauf', 'umbuchung_aus']);
-
-const DETAIL_TABS = [
-  { id: 'diagramm', label: 'Kursdiagramm' },
-  { id: 'buchungen', label: 'Buchungen' },
-  { id: 'trades', label: 'Trades' },
-  { id: 'ereignisse', label: 'Ereignisse' },
-];
-
-const TX_LABELS: Record<string, string> = {
-  kauf: 'Kauf', verkauf: 'Verkauf', dividende: 'Dividende', ausschuettung: 'Ausschüttung',
-  einlage: 'Einlage', entnahme: 'Entnahme', zinsen: 'Zinsen', zinsbelastung: 'Zinsbelastung',
-  gebuehren: 'Gebühren', gebuehrenerstattung: 'Gebührenerstattung',
-  steuern_tx: 'Steuern', steuererstattung: 'Steuerrückerstattung',
-  umbuchung_ein: 'Einlieferung', umbuchung_aus: 'Auslieferung',
-};
-
 export default function VermoegensuebersichtView() {
-  const { state, setBasisWaehrung, addBerichtszeitraum } = usePortfolio();
+  const { state, setBasisWaehrung, addBerichtszeitraum, updateWertpapier, deleteTransaktion, importTransaktionen } = usePortfolio();
 
   // ── Toolbar-State ──
   const [snapshotDate, setSnapshotDate] = useState<Date | null>(null); // null = heute
   const [clientFilter, setClientFilter] = useState<ClientFilterValue>(ENTIRE_PORTFOLIO);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState('diagramm');
 
   // ── Spalten-Konfigurations-Store (PP ConfigurationStore, viewToolBar) ──
   // Bei Konfig-Wechsel wird die Pane über paneKey neu gemountet, damit sie den
@@ -131,11 +110,8 @@ export default function VermoegensuebersichtView() {
       .filter(k => Math.abs(k.saldo) > 0.001),
     [aktiveKontoNamen, state.konten]);
 
-  // ── Selektierte Position für die Detail-Panes ──
+  // ── Selektierte Position für die Detail-Pane ──
   const selectedWp = selectedKey ? state.wertpapiere[selectedKey] : undefined;
-  const selectedTxs = useMemo(() =>
-    selectedKey ? state.transaktionen.filter(tx => (tx.isin || tx.wertpapierName) === selectedKey) : [],
-    [selectedKey, state.transaktionen]);
 
   const depotsForFilter = useMemo(() =>
     allDepotNamen.map(name => ({ name, referenzkontoName: state.depots[name]?.referenzkontoName })),
@@ -222,132 +198,17 @@ export default function VermoegensuebersichtView() {
           />
         }
         bottom={
-          <div className="flex flex-col h-full">
-            <TabBar tabs={DETAIL_TABS} active={detailTab} onChange={setDetailTab} />
-            <div className="flex-1 overflow-auto">
-              {!selectedKey || !selectedWp ? (
-                <div className="flex items-center justify-center h-full text-[12px]" style={{ color: 'var(--pp-text-muted)' }}>
-                  Wähle oben ein Wertpapier, um Details zu sehen.
-                </div>
-              ) : detailTab === 'diagramm' ? (
-                <KursChart wp={selectedWp} />
-              ) : detailTab === 'buchungen' ? (
-                <BuchungenTab txs={selectedTxs} />
-              ) : detailTab === 'trades' ? (
-                <TradesTab txs={selectedTxs} />
-              ) : (
-                <EreignisseTab txs={selectedTxs} />
-              )}
-            </div>
-          </div>
+          // PP StatementOfAssetsView.addPanePages == SecurityListView: derselbe
+          // Detail-Bereich wie in "Alle Wertpapiere" (Chart + Werkzeuge, 6 Tabs).
+          <WertpapierDetailPane
+            wp={selectedWp ?? null}
+            onUpdateWertpapier={updateWertpapier}
+            onDeleteTransaktion={deleteTransaktion}
+            onImportTransaktionen={importTransaktionen}
+            storagePrefix="vermoegen-detail"
+          />
         }
       />
     </div>
   );
-}
-
-/* ── Detail-Pane: Kursdiagramm (PP SecurityPriceChartPane) ── */
-function KursChart({ wp }: { wp: { name: string; kursHistorie: { datum: Date; kurs: number }[] } }) {
-  const data = useMemo(() =>
-    (wp.kursHistorie ?? []).map(h => ({ datum: datumKurz(h.datum), kurs: h.kurs })),
-    [wp]);
-  if (data.length === 0) return <Empty text="Keine Kurshistorie vorhanden." />;
-  return (
-    <div className="p-3 h-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--pp-border)" />
-          <XAxis dataKey="datum" tick={{ fontSize: 9, fill: 'var(--pp-text-muted)' }} tickLine={false} interval="preserveStartEnd" minTickGap={40} />
-          <YAxis tick={{ fontSize: 9, fill: 'var(--pp-text-muted)' }} tickLine={false} width={60} domain={['auto', 'auto']} />
-          <ReTooltip contentStyle={{ fontSize: 11, background: 'var(--pp-content-bg)', border: '1px solid var(--pp-border)', color: 'var(--pp-text)' }} formatter={(v) => [euro(v as number), 'Kurs']} />
-          <Line type="monotone" dataKey="kurs" stroke="var(--pp-accent)" strokeWidth={1.4} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-/* ── Detail-Pane: Buchungen (alle Transaktionen der Position) ── */
-function BuchungenTab({ txs }: { txs: Transaktion[] }) {
-  const sorted = useMemo(() => [...txs].sort((a, b) => b.datum.getTime() - a.datum.getTime()), [txs]);
-  if (sorted.length === 0) return <Empty text="Keine Buchungen." />;
-  const color = (tx: Transaktion) => (tx.typ === 'verkauf' || tx.typ === 'umbuchung_aus') ? 'var(--pp-red-text)' : 'var(--pp-green-text)';
-  return (
-    <table className="pp-table">
-      <thead><tr>
-        <th>Datum</th><th>Typ</th><th>Konto</th>
-        <th className="right">Stück</th><th className="right">Kurs</th><th className="right">Betrag</th>
-        <th className="right">Gebühren</th><th className="right">Steuern</th>
-      </tr></thead>
-      <tbody>
-        {sorted.map(tx => (
-          <tr key={tx.id} className="pp-row">
-            <td className="mono" style={{ color: color(tx) }}>{datumKurz(tx.datum)}</td>
-            <td style={{ color: color(tx) }}>{TX_LABELS[tx.typ] ?? tx.typ}</td>
-            <td style={{ color: 'var(--pp-text-muted)' }}>{tx.kontoName ?? ''}</td>
-            <td className="right mono">{tx.stueck > 0 ? stueck(tx.stueck) : ''}</td>
-            <td className="right mono">{tx.kurs > 0 ? euro(tx.kurs) : ''}</td>
-            <td className="right mono">{euro(tx.betrag)}</td>
-            <td className="right mono">{tx.gebuehren > 0 ? euro(tx.gebuehren) : ''}</td>
-            <td className="right mono">{tx.steuern > 0 ? euro(tx.steuern) : ''}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-/* ── Detail-Pane: Trades (Käufe/Verkäufe) ── */
-function TradesTab({ txs }: { txs: Transaktion[] }) {
-  const trades = useMemo(() =>
-    txs.filter(tx => SHARES_ADD.has(tx.typ) || SHARES_SUB.has(tx.typ)).sort((a, b) => b.datum.getTime() - a.datum.getTime()),
-    [txs]);
-  if (trades.length === 0) return <Empty text="Keine Trades." />;
-  const color = (tx: Transaktion) => (tx.typ === 'verkauf' || tx.typ === 'umbuchung_aus') ? 'var(--pp-red-text)' : 'var(--pp-green-text)';
-  return (
-    <table className="pp-table">
-      <thead><tr>
-        <th>Datum</th><th>Typ</th><th className="right">Stück</th>
-        <th className="right">Kurs</th><th className="right">Betrag</th>
-      </tr></thead>
-      <tbody>
-        {trades.map(tx => (
-          <tr key={tx.id} className="pp-row">
-            <td className="mono" style={{ color: color(tx) }}>{datumKurz(tx.datum)}</td>
-            <td style={{ color: color(tx) }}>{TX_LABELS[tx.typ] ?? tx.typ}</td>
-            <td className="right mono">{stueck(tx.stueck)}</td>
-            <td className="right mono">{tx.kurs > 0 ? euro(tx.kurs) : euro(tx.betrag / Math.max(tx.stueck, 1))}</td>
-            <td className="right mono">{euro(tx.betrag)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-/* ── Detail-Pane: Ereignisse (Dividenden/Ausschüttungen) ── */
-function EreignisseTab({ txs }: { txs: Transaktion[] }) {
-  const events = useMemo(() =>
-    txs.filter(tx => tx.typ === 'dividende' || tx.typ === 'ausschuettung').sort((a, b) => b.datum.getTime() - a.datum.getTime()),
-    [txs]);
-  if (events.length === 0) return <Empty text="Keine Ereignisse." />;
-  return (
-    <table className="pp-table">
-      <thead><tr><th>Datum</th><th>Typ</th><th>Konto</th><th className="right">Betrag</th></tr></thead>
-      <tbody>
-        {events.map(tx => (
-          <tr key={tx.id} className="pp-row">
-            <td className="mono">{datumKurz(tx.datum)}</td>
-            <td>{TX_LABELS[tx.typ] ?? tx.typ}</td>
-            <td style={{ color: 'var(--pp-text-muted)' }}>{tx.kontoName ?? ''}</td>
-            <td className="right mono" style={{ color: 'var(--pp-green-text)' }}>{euro(tx.betrag)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function Empty({ text }: { text: string }) {
-  return <div className="flex items-center justify-center h-full text-[12px]" style={{ color: 'var(--pp-text-muted)' }}>{text}</div>;
 }
