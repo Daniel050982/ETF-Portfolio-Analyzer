@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useRef } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { usePortfolio } from '../store/PortfolioContext';
 import { SplitPane } from '../components/SplitPane';
 import { TabBar } from '../components/PPElements';
@@ -65,15 +65,13 @@ export default function VermoegensuebersichtView() {
   const configStore = useConfigStore('vermoegen-uebersicht-cfgstore', ASSET_STORAGE_KEY, () => setPaneKey(k => k + 1));
 
   // ── Pane-Controls (Export + Spaltenmenü-Nodes) für den View-Header ──
-  // In einer Ref gehalten, damit das fortlaufende Melden aus der Pane kein
-  // Re-Render (und damit keine Render-Schleife) auslöst. `ready` schaltet die
-  // Buttons frei, sobald die Pane erstmals gemeldet hat.
-  const controlsRef = useRef<{ exportCSV: () => void; menuNodes: MenuNode[] } | null>(null);
-  const [ready, setReady] = useState(false);
+  // Als State gehalten, damit das offene Spaltenmenü sich aktualisiert, wenn
+  // sich Spalten-Sichtbarkeit ändert. Die Pane meldet nur bei echten
+  // Änderungen (nicht bei jedem Render), daher keine Render-Schleife.
+  const [controls, setControls] = useState<{ exportCSV: () => void; menuNodes: MenuNode[] } | null>(null);
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const receiveControls = useCallback((c: { exportCSV: () => void; menuNodes: MenuNode[] }) => {
-    controlsRef.current = c;
-    setReady(r => r || true);
+    setControls(c);
   }, []);
 
   // ── Verwendete Währungen (für Basiswährungs-DropDown) ──
@@ -187,17 +185,17 @@ export default function VermoegensuebersichtView() {
           />
           {/* CSV-Export (aus der Pane) */}
           <button className="pp-toolbar-btn" title="Daten exportieren"
-            onClick={() => controlsRef.current?.exportCSV()} disabled={!ready}>
+            onClick={() => controls?.exportCSV()} disabled={!controls}>
             <Download size={14} />
           </button>
-          {/* Spaltenmenü (aus der Pane) — Nodes beim Öffnen frisch aus der Ref */}
+          {/* Spaltenmenü (aus der Pane) — Nodes aus State, aktualisiert beim Toggle */}
           <div className="relative">
             <button className="pp-toolbar-btn" title="Spalten anzeigen / ausblenden"
-              onClick={() => setColumnMenuOpen(o => !o)} disabled={!ready}>
+              onClick={() => setColumnMenuOpen(o => !o)} disabled={!controls}>
               <Settings size={14} />
             </button>
-            {columnMenuOpen && controlsRef.current && (
-              <HierarchyMenu nodes={controlsRef.current.menuNodes} onClose={() => setColumnMenuOpen(false)} />
+            {columnMenuOpen && controls && (
+              <HierarchyMenu nodes={controls.menuNodes} onClose={() => setColumnMenuOpen(false)} />
             )}
           </div>
         </div>

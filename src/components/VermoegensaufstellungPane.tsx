@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, Fragment } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from 'react';
 import { ColorMarker, getColor } from './PPElements';
 import { useColumnConfig, ColumnHeader } from './useColumnConfig';
 import { HierarchyMenu, type MenuNode } from './HierarchyMenu';
@@ -73,7 +73,10 @@ export function VermoegensaufstellungPane({
 }: Props) {
   const vermoegenColumns = useMemo(() => buildVermoegenColumns(reportPeriods, taxonomien), [reportPeriods, taxonomien]);
   const vermoegenHiddenDefault = useMemo(() => buildVermoegenHiddenDefault(reportPeriods, taxonomien), [reportPeriods, taxonomien]);
-  const cfg = useColumnConfig(storageKey, vermoegenColumns, vermoegenHiddenDefault);
+  // Spalten, die beim Laufzeit-Hinzukommen sichtbar bleiben sollen (die im
+  // "Neu…"-Dialog gewählte Spalte). Wird vor dem Anlegen befüllt.
+  const keepVisibleRef = useRef<Set<string>>(new Set());
+  const cfg = useColumnConfig(storageKey, vermoegenColumns, vermoegenHiddenDefault, keepVisibleRef);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [neuPeriodeDialog, setNeuPeriodeDialog] = useState<string | null>(null);
@@ -340,9 +343,14 @@ export function VermoegensaufstellungPane({
   }, [cols, positions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // PP: Im externen Modus (View-Header) die Steuer-Elemente nach außen melden.
+  // Steuer-Elemente an den View melden — nur wenn sich der für das Menü
+  // relevante Zustand ändert (Spalten-Sichtbarkeit, Klassifizierung, Spalten-
+  // satz). So aktualisiert sich das offene Spaltenmenü beim Toggle, ohne dass
+  // ein Melden-bei-jedem-Render eine Endlosschleife erzeugt.
   useEffect(() => {
     if (externalToolbar && onControls) onControls({ exportCSV, menuNodes });
-  }); // bei jedem Render melden, damit menuNodes (Sichtbarkeiten) aktuell bleiben
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalToolbar, cfg.hidden, klassifizierung, vermoegenColumns, summeOben, summeUnten]);
 
   return (
     <div className="flex flex-col h-full">
@@ -358,7 +366,13 @@ export function VermoegensaufstellungPane({
         </div>
       )}
       {neuPeriodeDialog !== null && (
-        <ReportingPeriodDialog onClose={() => setNeuPeriodeDialog(null)} onSelect={r => onAddPeriod(r, neuPeriodeDialog)} />
+        <ReportingPeriodDialog onClose={() => setNeuPeriodeDialog(null)} onSelect={r => {
+          // Nur die für DIESE Kennzahl/Gruppe gewählte Spalte soll sichtbar
+          // bleiben (alle anderen neuen Spalten werden versteckt). Deterministisch
+          // über keepVisibleRef, bevor der neue Zeitraum die Spalten erzeugt.
+          keepVisibleRef.current.add(`${neuPeriodeDialog}_${r.key}`);
+          onAddPeriod(r, neuPeriodeDialog);
+        }} />
       )}
       <div className="flex-1 overflow-auto">
         <table className="pp-table">

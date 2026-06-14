@@ -55,7 +55,15 @@ function save(key: string, st: PersistState) {
   try { localStorage.setItem(`pp-colcfg-${key}`, JSON.stringify(st)); } catch { /* */ }
 }
 
-export function useColumnConfig(storageKey: string, columns: ColumnDef[], defaultHidden?: string[]) {
+export function useColumnConfig(
+  storageKey: string,
+  columns: ColumnDef[],
+  defaultHidden?: string[],
+  /* IDs, die beim Laufzeit-Hinzukommen NICHT versteckt werden sollen (z.B. die
+     im "Neu…"-Dialog gewählte Spalte). Ref, damit der Aufrufer sie vor dem
+     Anlegen setzen kann. */
+  keepVisibleRef?: React.MutableRefObject<Set<string>>,
+) {
   const colIds = useMemo(() => columns.map(c => c.id), [columns]);
   const colMap = useMemo(() => new Map(columns.map(c => [c.id, c])), [columns]);
 
@@ -74,16 +82,31 @@ export function useColumnConfig(storageKey: string, columns: ColumnDef[], defaul
   // Spalten können sich zur Laufzeit ändern (z.B. neuer Berichtszeitraum →
   // neue periodische Spalten). Neu hinzugekommene IDs an die Reihenfolge
   // anhängen, damit sie überhaupt gerendert werden können; entfallene IDs
-  // ausfiltern. (Sichtbarkeit steuert der Aufrufer über hidden.)
+  // ausfiltern. Zur Laufzeit neu hinzugekommene Spalten werden standardmäßig
+  // VERSTECKT (PP: ein neuer Berichtszeitraum setzt nicht überall einen Haken);
+  // der Aufrufer macht gezielt einzelne sichtbar.
   useEffect(() => {
     setOrder(prev => {
       const known = new Set(prev);
       const added = colIds.filter(id => !known.has(id));
       const kept = prev.filter(id => colMap.has(id));
       if (added.length === 0 && kept.length === prev.length) return prev;
+      const toHide = added.filter(id => !keepVisibleRef?.current.has(id));
+      if (toHide.length > 0) {
+        setHidden(prevHidden => {
+          const next = new Set(prevHidden);
+          for (const id of toHide) next.add(id);
+          save(storageKey, { order: [...kept, ...added], widths, sortCols, hidden: [...next] });
+          return next;
+        });
+      }
+      // keepVisibleRef NICHT hier leeren: in React StrictMode (Dev) läuft dieser
+      // Effekt doppelt; ein vorzeitiges Leeren würde beim zweiten Lauf die
+      // gewünschte Spalte doch verstecken. Die IDs bleiben stehen (harmlos, da
+      // jede ID nur einmal als "added" auftritt).
       return [...kept, ...added];
     });
-  }, [colIds, colMap]);
+  }, [colIds, colMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const persist = useCallback((patch: Partial<PersistState>) => {
     save(storageKey, {
