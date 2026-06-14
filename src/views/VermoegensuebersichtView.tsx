@@ -213,6 +213,7 @@ export default function VermoegensuebersichtView() {
             onSelectPosition={setSelectedKey}
             externalToolbar
             onControls={receiveControls}
+            defaultKlassifizierung="__typ__"
           />
         }
         bottom={
